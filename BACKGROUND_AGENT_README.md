@@ -79,11 +79,13 @@ fitness-app-new/
 - Check error scenarios
 - Test on both web and mobile
 
-### Git Workflow
-- Create feature branches for each task
-- Write descriptive commit messages
-- Update task status in `BACKGROUND_AGENT_TASKS.md`
-- Document any new APIs or services
+### Git Workflow ✅ SETUP COMPLETE
+- **Repository**: Git is installed and initialized
+- **Current Branch**: `develop` (for development work)
+- **Main Branch**: `main` (for production-ready code)
+- **Feature Branches**: Create for each task (e.g., `feature/backend-setup`)
+- **Commit Messages**: Use format `type(scope): description`
+- **See**: `GIT_WORKFLOW.md` for detailed instructions
 
 ## 🔧 Environment Setup
 
@@ -156,6 +158,66 @@ fitness-app-new/
 
 ## 🎉 Ready to Start!
 
+### Quick Start Commands
+
+#### Step 1: Setup Git (if needed)
+```bash
+# Run the Git setup script
+.\setup-git-for-agent.ps1
+# OR
+.\setup-git-for-agent.bat
+```
+
+#### Step 2: Start Development
+```bash
+# Check current Git status
+git status
+
+# Create feature branch for backend work
+git checkout -b feature/backend-setup
+
+# Start backend development
+cd backend
+npm install
+npm start
+
+# When ready to commit changes
+git add .
+git commit -m "feat(backend): complete Express server setup"
+git checkout develop
+git merge feature/backend-setup
+```
+
+### First Task: Backend Completion
 The background agent should begin with **Task 1.1: Backend Completion** as it's the foundation for everything else. The basic structure is there, just needs to be completed and tested.
 
 **Start here**: `backend/server.js` - complete the Express server setup!
+
+### Git Status
+- ✅ Repository initialized
+- ✅ Initial commit created
+- ✅ Develop branch ready
+- ✅ Feature branching available
+
+### Troubleshooting Git Issues
+If the background agent gets "git not found" errors:
+
+1. **Run the setup script**:
+   ```bash
+   .\setup-git-for-agent.ps1
+   ```
+
+2. **Manual PATH setup**:
+   ```bash
+   $env:PATH += ";C:\Program Files\Git\bin"
+   ```
+
+3. **Direct Git path**:
+   ```bash
+   & "C:\Program Files\Git\bin\git.exe" --version
+   ```
+
+4. **Check Git installation**:
+   ```bash
+   Test-Path "C:\Program Files\Git\bin\git.exe"
+   ```
