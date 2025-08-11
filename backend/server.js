@@ -144,6 +144,12 @@ app.use('/api/progress', authenticateToken, progressRoutes);
 app.use('/api/social', authenticateToken, socialRoutes);
 app.use('/api/analytics', authenticateToken, analyticsRoutes);
 app.use('/api/ai', aiRoutes);
+try {
+  const plansRoutes = require('./routes/plans');
+  app.use('/api/plans', authenticateToken, plansRoutes);
+} catch (e) {
+  console.warn('Plans routes not loaded:', e.message);
+}
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
