@@ -1,3 +1,7 @@
+let SecureStore;
+try {
+  SecureStore = require('expo-secure-store');
+} catch {}
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 
@@ -44,6 +48,7 @@ export const registerWithEmail = async (email, password, firstName, lastName) =>
       success: true,
       user: data.data.user,
       token: data.data.token,
+      refreshToken: data.data.refreshToken,
     };
   } catch (error) {
     console.error('Registration error:', error);
@@ -75,6 +80,7 @@ export const loginWithEmail = async (email, password) => {
       success: true,
       user: data.data.user,
       token: data.data.token,
+      refreshToken: data.data.refreshToken,
     };
   } catch (error) {
     console.error('Login error:', error);
@@ -150,11 +156,16 @@ export const logout = async (token) => {
 };
 
 // Session Management
-export const saveSession = async (user, token) => {
+export const saveSession = async (user, token, refreshToken) => {
   try {
-    await AsyncStorage.setItem('user', JSON.stringify(user));
-    await AsyncStorage.setItem('token', token);
-    await AsyncStorage.setItem('isAuthenticated', 'true');
+    const save = async (k, v) => {
+      if (SecureStore?.setItemAsync) return SecureStore.setItemAsync(k, v);
+      return AsyncStorage.setItem(k, v);
+    };
+    await save('user', JSON.stringify(user));
+    await save('token', token);
+    if (refreshToken) await save('refreshToken', refreshToken);
+    await save('isAuthenticated', 'true');
   } catch (error) {
     console.error('Error saving session:', error);
   }
@@ -162,15 +173,17 @@ export const saveSession = async (user, token) => {
 
 export const loadSession = async () => {
   try {
-    const user = await AsyncStorage.getItem('user');
-    const token = await AsyncStorage.getItem('token');
-    const isAuthenticated = await AsyncStorage.getItem('isAuthenticated');
+    const get = async (k) => (SecureStore?.getItemAsync ? SecureStore.getItemAsync(k) : AsyncStorage.getItem(k));
+    const user = await get('user');
+    const token = await get('token');
+    const refreshToken = await get('refreshToken');
+    const isAuthenticated = await get('isAuthenticated');
     
     if (user && token && isAuthenticated === 'true') {
       // Verify token is still valid by getting fresh user data
       try {
         const freshUser = await getCurrentUser(token);
-        return { user: freshUser, token };
+        return { user: freshUser, token, refreshToken };
       } catch (error) {
         // Token is invalid, clear session
         await clearSession();
@@ -186,14 +199,35 @@ export const loadSession = async () => {
 
 export const clearSession = async () => {
   try {
-    const token = await AsyncStorage.getItem('token');
+    const get = async (k) => (SecureStore?.getItemAsync ? SecureStore.getItemAsync(k) : AsyncStorage.getItem(k));
+    const remove = async (k) => (SecureStore?.deleteItemAsync ? SecureStore.deleteItemAsync(k) : AsyncStorage.removeItem(k));
+    const token = await get('token');
     if (token) {
       await logout(token);
     }
-    await AsyncStorage.removeItem('user');
-    await AsyncStorage.removeItem('token');
-    await AsyncStorage.removeItem('isAuthenticated');
+    await remove('user');
+    await remove('token');
+    await remove('refreshToken');
+    await remove('isAuthenticated');
   } catch (error) {
     console.error('Error clearing session:', error);
+  }
+};
+
+export const refreshAccessToken = async (refreshToken) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to refresh token');
+    }
+    return { token: data.data.token, refreshToken: data.data.refreshToken };
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    throw error;
   }
 };

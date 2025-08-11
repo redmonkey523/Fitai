@@ -36,7 +36,7 @@ class ApiService {
   async makeRequest(endpoint, options = {}) {
     try {
       const url = `${this.baseURL}${endpoint}`;
-      const headers = await this.createHeaders(options.includeAuth !== false);
+      let headers = await this.createHeaders(options.includeAuth !== false);
       // Respect multipart: do not force JSON content-type
       if (!options.isMultipart) {
         headers['Content-Type'] = headers['Content-Type'] || 'application/json';
@@ -55,10 +55,33 @@ class ApiService {
         config.body = JSON.stringify(options.body);
       }
 
-      const response = await fetch(url, config);
+      let response = await fetch(url, config);
       const data = await response.json();
 
       if (!response.ok) {
+        // Attempt 401 refresh once
+        if (response.status === 401 && options.includeAuth !== false && !options._retried) {
+          try {
+            const { refreshAccessToken } = await import('./authService');
+            const { AsyncStorage } = await import('@react-native-async-storage/async-storage');
+            const refreshToken = await AsyncStorage.getItem('refreshToken');
+            if (refreshToken) {
+              const refreshed = await refreshAccessToken(refreshToken);
+              await AsyncStorage.setItem('token', refreshed.token);
+              const retryHeaders = await this.createHeaders(true);
+              if (!options.isMultipart) retryHeaders['Content-Type'] = retryHeaders['Content-Type'] || 'application/json';
+              const retryConfig = { ...config, headers: retryHeaders };
+              response = await fetch(url, retryConfig);
+              const retryData = await response.json();
+              if (!response.ok) {
+                throw new Error(retryData.message || `HTTP ${response.status}: ${response.statusText}`);
+              }
+              return retryData;
+            }
+          } catch (e) {
+            // fallthrough to error
+          }
+        }
         throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
       }
 

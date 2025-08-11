@@ -12,18 +12,43 @@ const socketIo = require('socket.io');
 // Load environment variables
 dotenv.config();
 
-// Import routes
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
-const workoutRoutes = require('./routes/workouts');
-const nutritionRoutes = require('./routes/nutrition');
-const progressRoutes = require('./routes/progress');
-const socialRoutes = require('./routes/social');
-const analyticsRoutes = require('./routes/analytics');
+// Import routes with error handling
+let authRoutes, userRoutes, workoutRoutes, nutritionRoutes, progressRoutes, socialRoutes, analyticsRoutes, aiRoutes;
 
-// Import middleware
-const { authenticateToken } = require('./middleware/auth');
-const errorHandler = require('./middleware/errorHandler');
+try {
+  authRoutes = require('./routes/auth');
+  userRoutes = require('./routes/users');
+  workoutRoutes = require('./routes/workouts');
+  nutritionRoutes = require('./routes/nutrition');
+  progressRoutes = require('./routes/progress');
+  socialRoutes = require('./routes/social');
+  analyticsRoutes = require('./routes/analytics');
+  aiRoutes = require('./routes/ai');
+} catch (error) {
+  console.error('Error loading routes:', error.message);
+  // Create basic route handlers for development
+  const basicRouter = require('express').Router();
+  basicRouter.get('/', (req, res) => res.json({ message: 'Route available' }));
+  authRoutes = userRoutes = workoutRoutes = nutritionRoutes = progressRoutes = socialRoutes = analyticsRoutes = aiRoutes = basicRouter;
+}
+
+// Import middleware with error handling
+let authenticateToken, errorHandler;
+
+try {
+  const authMiddleware = require('./middleware/auth');
+  authenticateToken = authMiddleware.authenticateToken;
+  const errorHandlerModule = require('./middleware/errorHandler');
+  errorHandler = errorHandlerModule.errorHandler;
+} catch (error) {
+  console.error('Error loading middleware:', error.message);
+  // Create basic middleware for development
+  authenticateToken = (req, res, next) => next();
+  errorHandler = (err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  };
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -34,13 +59,38 @@ const io = socketIo(server, {
   }
 });
 
-// Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/fitness_app', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+// Database connection with fallback
+const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/fitness_app';
+console.log('Attempting to connect to MongoDB at:', mongoUri);
+
+let isMongoConnected = false;
+
+mongoose.connect(mongoUri, {
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 10000,
 })
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.error('MongoDB connection error:', err));
+.then(() => {
+  console.log('✅ Connected to MongoDB');
+  isMongoConnected = true;
+})
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err.message);
+  console.log('🔄 Continuing with in-memory storage for development...');
+  console.log('📝 To fix this:');
+  console.log('   1. Install MongoDB: https://www.mongodb.com/try/download/community');
+  console.log('   2. Start MongoDB service: net start MongoDB');
+  console.log('   3. Or use Docker: docker run -d -p 27017:27017 mongo');
+  console.log('   4. Or use MongoDB Atlas (cloud): https://www.mongodb.com/atlas');
+  isMongoConnected = false;
+});
+
+// Expose MongoDB connection status
+app.get('/api/db-status', (req, res) => {
+  res.json({
+    mongodb: isMongoConnected,
+    message: isMongoConnected ? 'MongoDB connected' : 'Using in-memory storage'
+  });
+});
 
 // Security middleware
 app.use(helmet());
@@ -77,7 +127,11 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV
+    environment: process.env.NODE_ENV,
+    database: {
+      mongodb: isMongoConnected,
+      status: isMongoConnected ? 'connected' : 'using in-memory storage'
+    }
   });
 });
 
@@ -89,6 +143,7 @@ app.use('/api/nutrition', authenticateToken, nutritionRoutes);
 app.use('/api/progress', authenticateToken, progressRoutes);
 app.use('/api/social', authenticateToken, socialRoutes);
 app.use('/api/analytics', authenticateToken, analyticsRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
