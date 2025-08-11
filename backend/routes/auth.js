@@ -2,8 +2,15 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const User = require('../models/User');
-const { generateToken, generateRefreshToken } = require('../middleware/auth');
+// Use temporary in-memory DB when MongoDB is not available
+let User;
+try {
+  User = require('../models/User');
+} catch (error) {
+  console.warn('MongoDB User model not available, using temporary in-memory storage');
+  User = require('../temp-memory-db');
+}
+const { generateToken, generateRefreshToken, authenticateToken } = require('../middleware/auth');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 
 const router = express.Router();
@@ -80,6 +87,72 @@ const validatePasswordChange = [
     .isLength({ min: 6 })
     .withMessage('New password must be at least 6 characters long')
 ];
+
+// @route   POST /api/auth/test-register
+// @desc    Simple test registration (bypasses strict validation)
+// @access  Public
+router.post('/test-register', asyncHandler(async (req, res) => {
+  const { email, password, firstName, lastName } = req.body;
+
+  // Basic validation
+  if (!email || !password || !firstName || !lastName) {
+    return res.status(400).json({
+      success: false,
+      message: 'Email, password, firstName, and lastName are required'
+    });
+  }
+
+  // Check if user already exists
+  const existingUser = await User.findOne({ email });
+
+  if (existingUser) {
+    return res.status(400).json({
+      success: false,
+      message: 'Email already registered'
+    });
+  }
+
+  // Create user with minimal data
+  const user = new User({
+    email,
+    username: email.split('@')[0],
+    password,
+    firstName,
+    lastName,
+    dateOfBirth: new Date('1990-01-01'),
+    gender: 'prefer_not_to_say',
+    height: { value: 170, unit: 'cm' },
+    weight: { value: 70, unit: 'kg' },
+    fitnessLevel: 'beginner',
+    goals: ['general_fitness']
+  });
+
+  await user.save();
+
+  // Generate tokens
+  const token = generateToken(user._id);
+
+  // Send response
+  res.status(201).json({
+    success: true,
+    message: 'User registered successfully',
+    data: {
+      user: {
+        _id: user._id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        fitnessLevel: user.fitnessLevel,
+        goals: user.goals,
+        isEmailVerified: user.isEmailVerified,
+        isPremium: user.isPremium,
+        createdAt: user.createdAt
+      },
+      token
+    }
+  });
+}));
 
 // @route   POST /api/auth/register
 // @desc    Register a new user
@@ -481,6 +554,29 @@ router.post('/logout', asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Logged out successfully'
+  });
+}));
+
+// @route   GET /api/auth/me
+// @desc    Get current authenticated user
+// @access  Private
+router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
+  const sanitized = {
+    _id: req.user._id,
+    email: req.user.email,
+    username: req.user.username,
+    firstName: req.user.firstName,
+    lastName: req.user.lastName,
+    fitnessLevel: req.user.fitnessLevel,
+    goals: req.user.goals,
+    isEmailVerified: req.user.isEmailVerified,
+    isPremium: req.user.isPremium,
+    stats: req.user.stats,
+  };
+
+  res.json({
+    success: true,
+    data: { user: sanitized }
   });
 }));
 
