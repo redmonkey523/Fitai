@@ -1,194 +1,323 @@
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { store } from '../store';
-import { logoutUser, refreshToken } from '../store/slices/authSlice';
+import { API_BASE_URL, REQUEST_TIMEOUT } from '../config/api';
 
-// Create axios instance
-const api = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api',
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// API service with authentication
+class ApiService {
+  constructor() {
+    this.baseURL = API_BASE_URL;
+    this.timeout = REQUEST_TIMEOUT;
+  }
 
-// Request interceptor to add auth token
-api.interceptors.request.use(
-  async (config) => {
+  // Get auth token from storage
+  async getAuthToken() {
     try {
-      const token = await AsyncStorage.getItem('persist:root');
-      if (token) {
-        const parsedToken = JSON.parse(token);
-        const authState = JSON.parse(parsedToken.auth);
-        if (authState.token) {
-          config.headers.Authorization = `Bearer ${authState.token}`;
-        }
-      }
+      const { AsyncStorage } = await import('@react-native-async-storage/async-storage');
+      return await AsyncStorage.getItem('token');
     } catch (error) {
-      console.error('Error getting token from storage:', error);
+      console.error('Error getting auth token:', error);
+      return null;
     }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
   }
-);
 
-// Response interceptor to handle token refresh
-api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  async (error) => {
-    const originalRequest = error.config;
+  // Create headers with authentication
+  async createHeaders(includeAuth = true) {
+    const headers = {};
 
-    // If error is 401 and we haven't already tried to refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        // Get refresh token from storage
-        const token = await AsyncStorage.getItem('persist:root');
-        if (token) {
-          const parsedToken = JSON.parse(token);
-          const authState = JSON.parse(parsedToken.auth);
-          
-          if (authState.refreshToken) {
-            // Try to refresh token
-            const response = await axios.post(
-              `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/refresh`,
-              { refreshToken: authState.refreshToken }
-            );
-
-            const { token: newToken, refreshToken: newRefreshToken } = response.data.data;
-
-            // Update tokens in storage
-            const updatedAuthState = {
-              ...authState,
-              token: newToken,
-              refreshToken: newRefreshToken
-            };
-
-            await AsyncStorage.setItem('persist:root', JSON.stringify({
-              ...parsedToken,
-              auth: JSON.stringify(updatedAuthState)
-            }));
-
-            // Update store
-            store.dispatch(refreshToken.fulfilled({
-              data: { token: newToken, refreshToken: newRefreshToken }
-            }, ''));
-
-            // Retry original request with new token
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-            return api(originalRequest);
-          }
-        }
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        // If refresh fails, logout user
-        store.dispatch(logoutUser());
-        return Promise.reject(refreshError);
+    if (includeAuth) {
+      const token = await this.getAuthToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
     }
 
-    return Promise.reject(error);
+    return headers;
   }
-);
 
-// API endpoints
-export const authAPI = {
-  register: (userData) => api.post('/auth/register', userData),
-  login: (credentials) => api.post('/auth/login', credentials),
-  logout: () => api.post('/auth/logout'),
-  refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
-  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
-  resetPassword: (resetToken, newPassword) => api.post('/auth/reset-password', { resetToken, newPassword }),
-  verifyEmail: (verificationToken) => api.post('/auth/verify-email', { verificationToken }),
-  resendVerification: (email) => api.post('/auth/resend-verification', { email })
-};
+  // Make API request with error handling
+  async makeRequest(endpoint, options = {}) {
+    try {
+      const url = `${this.baseURL}${endpoint}`;
+      const headers = await this.createHeaders(options.includeAuth !== false);
+      // Respect multipart: do not force JSON content-type
+      if (!options.isMultipart) {
+        headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+      }
+      
+      const config = {
+        method: options.method || 'GET',
+        headers,
+        timeout: this.timeout,
+        ...options,
+      };
 
-export const userAPI = {
-  getProfile: () => api.get('/users/profile'),
-  updateProfile: (userData) => api.put('/users/profile', userData),
-  updatePreferences: (preferences) => api.put('/users/preferences', preferences),
-  updateSettings: (settings) => api.put('/users/settings', settings),
-  deleteAccount: () => api.delete('/users/account'),
-  uploadProfilePicture: (formData) => api.post('/users/profile-picture', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  })
-};
+      if (options.isMultipart && options.body) {
+        config.body = options.body; // FormData
+      } else if (options.body && typeof options.body === 'object') {
+        config.body = JSON.stringify(options.body);
+      }
 
-export const workoutAPI = {
-  getWorkouts: (params) => api.get('/workouts', { params }),
-  getWorkout: (id) => api.get(`/workouts/${id}`),
-  createWorkout: (workoutData) => api.post('/workouts', workoutData),
-  updateWorkout: (id, workoutData) => api.put(`/workouts/${id}`, workoutData),
-  deleteWorkout: (id) => api.delete(`/workouts/${id}`),
-  startWorkout: (id) => api.post(`/workouts/${id}/start`),
-  endWorkout: (id, completionData) => api.post(`/workouts/${id}/end`, completionData),
-  getTemplates: () => api.get('/workouts/templates'),
-  createTemplate: (templateData) => api.post('/workouts/templates', templateData),
-  getRecommendations: () => api.get('/workouts/recommendations')
-};
+      const response = await fetch(url, config);
+      const data = await response.json();
 
-export const exerciseAPI = {
-  getExercises: (params) => api.get('/exercises', { params }),
-  getExercise: (id) => api.get(`/exercises/${id}`),
-  searchExercises: (query) => api.get('/exercises/search', { params: { q: query } }),
-  getExercisesByCategory: (category) => api.get(`/exercises/category/${category}`),
-  getExercisesByMuscleGroup: (muscleGroup) => api.get(`/exercises/muscle-group/${muscleGroup}`),
-  rateExercise: (id, rating) => api.post(`/exercises/${id}/rate`, rating)
-};
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
 
-export const nutritionAPI = {
-  getNutritionLog: (date) => api.get('/nutrition/log', { params: { date } }),
-  addFood: (foodData) => api.post('/nutrition/food', foodData),
-  updateFood: (id, foodData) => api.put(`/nutrition/food/${id}`, foodData),
-  deleteFood: (id) => api.delete(`/nutrition/food/${id}`),
-  searchFood: (query) => api.get('/nutrition/search', { params: { q: query } }),
-  getNutritionGoals: () => api.get('/nutrition/goals'),
-  updateNutritionGoals: (goals) => api.put('/nutrition/goals', goals),
-  getWaterIntake: (date) => api.get('/nutrition/water', { params: { date } }),
-  addWaterIntake: (amount) => api.post('/nutrition/water', { amount })
-};
+      return data;
+    } catch (error) {
+      console.error(`API request failed for ${endpoint}:`, error);
+      throw error;
+    }
+  }
 
-export const progressAPI = {
-  getProgress: (params) => api.get('/progress', { params }),
-  addMeasurement: (measurementData) => api.post('/progress/measurements', measurementData),
-  updateMeasurement: (id, measurementData) => api.put(`/progress/measurements/${id}`, measurementData),
-  deleteMeasurement: (id) => api.delete(`/progress/measurements/${id}`),
-  uploadProgressPhoto: (formData) => api.post('/progress/photos', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-  getProgressPhotos: (params) => api.get('/progress/photos', { params }),
-  deleteProgressPhoto: (id) => api.delete(`/progress/photos/${id}`),
-  getAnalytics: (params) => api.get('/progress/analytics', { params })
-};
+  // Auth endpoints
+  async register(userData) {
+    return this.makeRequest('/auth/register', {
+      method: 'POST',
+      body: userData,
+      includeAuth: false,
+    });
+  }
 
-export const socialAPI = {
-  getFeed: (params) => api.get('/social/feed', { params }),
-  createPost: (postData) => api.post('/social/posts', postData),
-  likePost: (id) => api.post(`/social/posts/${id}/like`),
-  unlikePost: (id) => api.delete(`/social/posts/${id}/like`),
-  commentOnPost: (id, comment) => api.post(`/social/posts/${id}/comments`, { comment }),
-  deleteComment: (postId, commentId) => api.delete(`/social/posts/${postId}/comments/${commentId}`),
-  getFriends: () => api.get('/social/friends'),
-  sendFriendRequest: (userId) => api.post('/social/friend-requests', { userId }),
-  acceptFriendRequest: (requestId) => api.put(`/social/friend-requests/${requestId}/accept`),
-  rejectFriendRequest: (requestId) => api.put(`/social/friend-requests/${requestId}/reject`),
-  getChallenges: () => api.get('/social/challenges'),
-  joinChallenge: (challengeId) => api.post(`/social/challenges/${challengeId}/join`),
-  leaveChallenge: (challengeId) => api.delete(`/social/challenges/${challengeId}/join`)
-};
+  async login(credentials) {
+    return this.makeRequest('/auth/login', {
+      method: 'POST',
+      body: credentials,
+      includeAuth: false,
+    });
+  }
 
-export const analyticsAPI = {
-  getDashboard: () => api.get('/analytics/dashboard'),
-  getWorkoutStats: (params) => api.get('/analytics/workouts', { params }),
-  getNutritionStats: (params) => api.get('/analytics/nutrition', { params }),
-  getProgressStats: (params) => api.get('/analytics/progress', { params }),
-  getInsights: () => api.get('/analytics/insights'),
-  getPredictions: () => api.get('/analytics/predictions')
-};
+  async logout() {
+    return this.makeRequest('/auth/logout', {
+      method: 'POST',
+    });
+  }
 
-export { api };
+  async getCurrentUser() {
+    return this.makeRequest('/auth/me');
+  }
+
+  async updateProfile(profileData) {
+    return this.makeRequest('/auth/profile', {
+      method: 'PUT',
+      body: profileData,
+    });
+  }
+
+  // User endpoints
+  async getUserProfile() {
+    return this.makeRequest('/users/profile');
+  }
+
+  async getUserStats() {
+    return this.makeRequest('/users/stats');
+  }
+
+  async updateUserSettings(settings) {
+    return this.makeRequest('/users/settings', {
+      method: 'PUT',
+      body: settings,
+    });
+  }
+
+  // Workout endpoints
+  async getWorkouts(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/workouts?${queryString}` : '/workouts';
+    return this.makeRequest(endpoint);
+  }
+
+  async getWorkout(id) {
+    return this.makeRequest(`/workouts/${id}`);
+  }
+
+  async createWorkout(workoutData) {
+    return this.makeRequest('/workouts', {
+      method: 'POST',
+      body: workoutData,
+    });
+  }
+
+  async updateWorkout(id, workoutData) {
+    return this.makeRequest(`/workouts/${id}`, {
+      method: 'PUT',
+      body: workoutData,
+    });
+  }
+
+  async deleteWorkout(id) {
+    return this.makeRequest(`/workouts/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async startWorkout(id) {
+    return this.makeRequest(`/workouts/${id}/start`, {
+      method: 'POST',
+    });
+  }
+
+  async completeWorkout(id, completionData) {
+    return this.makeRequest(`/workouts/${id}/complete`, {
+      method: 'POST',
+      body: completionData,
+    });
+  }
+
+  // Nutrition endpoints
+  async logNutrition(nutritionData) {
+    return this.makeRequest('/nutrition/entries', {
+      method: 'POST',
+      body: nutritionData,
+    });
+  }
+
+  async getNutritionHistory(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/nutrition/entries?${queryString}` : '/nutrition/entries';
+    return this.makeRequest(endpoint);
+  }
+
+  async getNutritionGoals() {
+    return this.makeRequest('/nutrition/goals');
+  }
+
+  async updateNutritionGoals(goals) {
+    return this.makeRequest('/nutrition/goals', {
+      method: 'PUT',
+      body: goals,
+    });
+  }
+
+  async searchNutrition(query) {
+    return this.makeRequest(`/nutrition/search?q=${encodeURIComponent(query)}`);
+  }
+
+  // Progress endpoints
+  async trackProgress(progressData) {
+    return this.makeRequest('/progress/entries', {
+      method: 'POST',
+      body: progressData,
+    });
+  }
+
+  async getProgressHistory(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/progress/entries?${queryString}` : '/progress/entries';
+    return this.makeRequest(endpoint);
+  }
+
+  async uploadProgressPhoto(photoData) {
+    return this.makeRequest('/progress/photos', {
+      method: 'POST',
+      body: photoData,
+    });
+  }
+
+  async getProgressPhotos() {
+    return this.makeRequest('/progress/photos');
+  }
+
+  async updateMeasurements(measurements) {
+    return this.makeRequest('/progress/measurements', {
+      method: 'PUT',
+      body: measurements,
+    });
+  }
+
+  // Social endpoints
+  async getSocialFeed(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/social/feed?${queryString}` : '/social/feed';
+    return this.makeRequest(endpoint);
+  }
+
+  async getFriends() {
+    return this.makeRequest('/social/friends');
+  }
+
+  async getChallenges() {
+    return this.makeRequest('/social/challenges');
+  }
+
+  async getLeaderboard() {
+    return this.makeRequest('/social/leaderboard');
+  }
+
+  // Analytics endpoints
+  async getAnalyticsDashboard() {
+    return this.makeRequest('/analytics/dashboard');
+  }
+
+  async getWorkoutAnalytics(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/analytics/workouts?${queryString}` : '/analytics/workouts';
+    return this.makeRequest(endpoint);
+  }
+
+  async getNutritionAnalytics(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/analytics/nutrition?${queryString}` : '/analytics/nutrition';
+    return this.makeRequest(endpoint);
+  }
+
+  async getProgressAnalytics(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = queryString ? `/analytics/progress?${queryString}` : '/analytics/progress';
+    return this.makeRequest(endpoint);
+  }
+
+  // AI endpoints
+  async scanFood(imageData) {
+    return this.makeRequest('/ai/food-recognition', {
+      method: 'POST',
+      body: imageData,
+      isMultipart: true,
+    });
+  }
+
+  async scanBarcode(barcodeData) {
+    return this.makeRequest('/ai/barcode-scan', {
+      method: 'POST',
+      body: barcodeData,
+    });
+  }
+
+  async getWorkoutRecommendation(preferences) {
+    return this.makeRequest('/ai/recommend-workout', {
+      method: 'POST',
+      body: preferences,
+    });
+  }
+
+  async analyzeProgress(progressData) {
+    return this.makeRequest('/ai/analyze-progress', {
+      method: 'POST',
+      body: progressData,
+    });
+  }
+
+  // Upload endpoints
+  async uploadImage(imageData) {
+    const form = new FormData();
+    form.append('file', imageData);
+    return this.makeRequest('/upload/single', {
+      method: 'POST',
+      body: form,
+      isMultipart: true,
+    });
+  }
+
+  async uploadProgressPhoto(photoData) {
+    const form = new FormData();
+    form.append('photos', photoData);
+    return this.makeRequest('/upload/progress-photos', {
+      method: 'POST',
+      body: form,
+      isMultipart: true,
+    });
+  }
+}
+
+// Create and export singleton instance
+const apiService = new ApiService();
+export default apiService;
