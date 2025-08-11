@@ -150,6 +150,12 @@ try {
 } catch (e) {
   console.warn('Plans routes not loaded:', e.message);
 }
+try {
+  const mealsRoutes = require('./routes/meals');
+  app.use('/api/meals', authenticateToken, mealsRoutes);
+} catch (e) {
+  console.warn('Meals routes not loaded:', e.message);
+}
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
