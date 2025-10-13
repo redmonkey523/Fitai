@@ -2,14 +2,20 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-// Use temporary in-memory DB when MongoDB is not available
-let User;
-try {
-  User = require('../models/User');
-} catch (error) {
-  console.warn('MongoDB User model not available, using temporary in-memory storage');
-  User = require('../temp-memory-db');
-}
+const mongoose = require('mongoose');
+
+// Resolve User model at request-time to avoid race with late Mongo connections
+const getUserModel = () => {
+  const isMongoConnected = mongoose.connection?.readyState === 1;
+  if (process.env.USE_IN_MEMORY_DB === 'true' || !isMongoConnected) {
+    if (!isMongoConnected) {
+      console.warn('User model: using in-memory storage (Mongo not connected).');
+    }
+    return require('../temp-memory-db');
+  }
+  return require('../models/User');
+};
+const jwt = require('jsonwebtoken');
 const { generateToken, generateRefreshToken, authenticateToken } = require('../middleware/auth');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 
@@ -92,6 +98,7 @@ const validatePasswordChange = [
 // @desc    Simple test registration (bypasses strict validation)
 // @access  Public
 router.post('/test-register', asyncHandler(async (req, res) => {
+  const User = getUserModel();
   const { email, password, firstName, lastName } = req.body;
 
   // Basic validation
@@ -112,6 +119,9 @@ router.post('/test-register', asyncHandler(async (req, res) => {
     });
   }
 
+  // Check for admin email and set premium privileges
+  const isAdmin = email === 'chickenman10010@gmail.com';
+  
   // Create user with minimal data
   const user = new User({
     email,
@@ -124,7 +134,10 @@ router.post('/test-register', asyncHandler(async (req, res) => {
     height: { value: 170, unit: 'cm' },
     weight: { value: 70, unit: 'kg' },
     fitnessLevel: 'beginner',
-    goals: ['general_fitness']
+    goals: ['general_fitness'],
+    isPremium: isAdmin, // Admin gets premium
+    isEmailVerified: isAdmin, // Admin gets verified email
+    trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
   });
 
   await user.save();
@@ -158,6 +171,7 @@ router.post('/test-register', asyncHandler(async (req, res) => {
 // @desc    Register a new user
 // @access  Public
 router.post('/register', validateRegistration, asyncHandler(async (req, res) => {
+  const User = getUserModel();
   // Check for validation errors
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -195,6 +209,9 @@ router.post('/register', validateRegistration, asyncHandler(async (req, res) => 
     });
   }
 
+  // Check for admin email and set premium privileges
+  const isAdmin = email === 'chickenman10010@gmail.com';
+  
   // Create user
   const user = new User({
     email,
@@ -208,7 +225,10 @@ router.post('/register', validateRegistration, asyncHandler(async (req, res) => 
     weight,
     fitnessLevel,
     goals,
-    workoutPreferences
+    workoutPreferences,
+    isPremium: isAdmin, // Admin gets premium
+    isEmailVerified: isAdmin, // Admin gets verified email
+    trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
   });
 
   await user.save();
@@ -243,6 +263,7 @@ router.post('/register', validateRegistration, asyncHandler(async (req, res) => 
 // @desc    Login user
 // @access  Public
 router.post('/login', validateLogin, asyncHandler(async (req, res) => {
+  const User = getUserModel();
   // Check for validation errors
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -255,8 +276,8 @@ router.post('/login', validateLogin, asyncHandler(async (req, res) => {
 
   const { email, password } = req.body;
 
-  // Find user by email
-  const user = await User.findOne({ email }).select('+password');
+  // Find user by email (temp DB always includes password)
+  const user = await User.findOne({ email });
   
   if (!user) {
     return res.status(401).json({
@@ -317,6 +338,7 @@ router.post('/login', validateLogin, asyncHandler(async (req, res) => {
 // @desc    Refresh access token
 // @access  Public
 router.post('/refresh', asyncHandler(async (req, res) => {
+  const User = getUserModel();
   const { refreshToken } = req.body;
 
   if (!refreshToken) {
@@ -371,6 +393,7 @@ router.post('/refresh', asyncHandler(async (req, res) => {
 // @desc    Send password reset email
 // @access  Public
 router.post('/forgot-password', validatePasswordReset, asyncHandler(async (req, res) => {
+  const User = getUserModel();
   // Check for validation errors
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -418,6 +441,7 @@ router.post('/forgot-password', validatePasswordReset, asyncHandler(async (req, 
 // @desc    Reset password with token
 // @access  Public
 router.post('/reset-password', asyncHandler(async (req, res) => {
+  const User = getUserModel();
   const { resetToken, newPassword } = req.body;
 
   if (!resetToken || !newPassword) {
@@ -459,6 +483,7 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
 // @desc    Verify email with token
 // @access  Public
 router.post('/verify-email', asyncHandler(async (req, res) => {
+  const User = getUserModel();
   const { verificationToken } = req.body;
 
   if (!verificationToken) {
@@ -497,6 +522,7 @@ router.post('/verify-email', asyncHandler(async (req, res) => {
 // @desc    Resend email verification
 // @access  Public
 router.post('/resend-verification', validatePasswordReset, asyncHandler(async (req, res) => {
+  const User = getUserModel();
   // Check for validation errors
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

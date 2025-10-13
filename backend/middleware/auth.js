@@ -1,5 +1,17 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const mongoose = require('mongoose');
+
+// Resolve User model at request-time to avoid race with late Mongo connections
+const getUserModel = () => {
+  const isMongoConnected = mongoose.connection?.readyState === 1;
+  if (process.env.USE_IN_MEMORY_DB === 'true' || !isMongoConnected) {
+    if (!isMongoConnected) {
+      console.warn('Auth middleware: using in-memory User model (Mongo not connected).');
+    }
+    return require('../temp-memory-db');
+  }
+  return require('../models/User');
+};
 
 // Middleware to authenticate JWT token
 const authenticateToken = async (req, res, next) => {
@@ -8,54 +20,95 @@ const authenticateToken = async (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.status(401).json({
-        success: false,
-        message: 'Access token required'
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Access token required'
+        }
       });
     }
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Get user from database
-    const user = await User.findById(decoded.userId).select('-password');
+    // Get user from database (supports both Mongoose and in-memory implementations)
+    const User = getUserModel();
+    // Some implementations (e.g., Mongoose) return a Query that supports chainable select()
+    // Our in-memory fallback returns a Promise<User>, so we need a two-step resolve
+    let user = await User.findById(decoded.userId);
+    if (user && typeof user.select === 'function') {
+      // In-memory select() is implemented on the instance; for Mongoose, this is harmless
+      user = user.select('-password');
+    }
     
     if (!user) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.status(401).json({
-        success: false,
-        message: 'Invalid token - user not found'
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid token - user not found'
+        }
       });
     }
 
     if (!user.isActive) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.status(401).json({
-        success: false,
-        message: 'Account is deactivated'
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Account is deactivated'
+        }
       });
     }
 
     // Add user to request object
     req.user = user;
+    // Trial enforcement (30 days) if not premium
+    try {
+      const now = Date.now();
+      const isPremium = Boolean(user.isPremium);
+      const premiumExpiresAt = user.premiumExpiresAt ? new Date(user.premiumExpiresAt).getTime() : null;
+      const createdAtMs = user.createdAt ? new Date(user.createdAt).getTime() : null;
+      const trialEndsAt = user.trialEndsAt ? new Date(user.trialEndsAt).getTime() : (createdAtMs ? createdAtMs + 30*24*60*60*1000 : null);
+      const premiumActive = premiumExpiresAt && premiumExpiresAt > now;
+      if (!premiumActive && !isPremium && trialEndsAt && now > trialEndsAt) {
+        const full = `${req.baseUrl || ''}${req.path || ''}`;
+        const allow = ['/api/auth', '/api/auth/me'];
+        const allowed = allow.some(p => full.startsWith(p));
+        if (!allowed) {
+          return res.status(402).json({ success: false, message: 'Trial expired. Please upgrade.' });
+        }
+      }
+    } catch {}
     next();
   } catch (error) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
-        success: false,
-        message: 'Invalid token'
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid token'
+        }
       });
     }
     
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
-        success: false,
-        message: 'Token expired'
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Token expired'
+        }
       });
     }
 
     console.error('Auth middleware error:', error);
     return res.status(500).json({
-      success: false,
-      message: 'Authentication error'
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Authentication error'
+      }
     });
   }
 };

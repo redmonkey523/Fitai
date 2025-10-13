@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -12,34 +13,57 @@ const socketIo = require('socket.io');
 // Load environment variables
 dotenv.config();
 
-// Import routes with error handling
-let authRoutes, userRoutes, workoutRoutes, nutritionRoutes, progressRoutes, socialRoutes, analyticsRoutes, aiRoutes;
-
-try {
-  authRoutes = require('./routes/auth');
-  userRoutes = require('./routes/users');
-  workoutRoutes = require('./routes/workouts');
-  nutritionRoutes = require('./routes/nutrition');
-  progressRoutes = require('./routes/progress');
-  socialRoutes = require('./routes/social');
-  analyticsRoutes = require('./routes/analytics');
-  aiRoutes = require('./routes/ai');
-} catch (error) {
-  console.error('Error loading routes:', error.message);
-  // Create basic route handlers for development
-  const basicRouter = require('express').Router();
-  basicRouter.get('/', (req, res) => res.json({ message: 'Route available' }));
-  authRoutes = userRoutes = workoutRoutes = nutritionRoutes = progressRoutes = socialRoutes = analyticsRoutes = aiRoutes = basicRouter;
+// Fail fast in production if cloud storage is not configured
+if (process.env.NODE_ENV === 'production') {
+  const hasCloud = Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET
+  );
+  if (!hasCloud) {
+    console.error('Missing Cloudinary env in production. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.');
+    process.exit(1);
+  }
 }
 
+// Import routes with resilient per-route error handling
+const createUnavailableRouter = (name) => {
+  const router = express.Router();
+  router.get('/', (req, res) => res.status(503).json({ success: false, message: `${name} route unavailable` }));
+  return router;
+};
+
+const safeLoadRoute = (path, name) => {
+  try {
+    return require(path);
+  } catch (error) {
+    console.error(`Failed to load ${name} routes from ${path}: ${error.message}`);
+    return createUnavailableRouter(name);
+  }
+};
+
+const authRoutes = safeLoadRoute('./routes/auth', 'auth');
+const userRoutes = safeLoadRoute('./routes/users', 'users');
+const workoutRoutes = safeLoadRoute('./routes/workouts', 'workouts');
+const nutritionRoutes = safeLoadRoute('./routes/nutrition', 'nutrition');
+const progressRoutes = safeLoadRoute('./routes/progress', 'progress');
+const socialRoutes = safeLoadRoute('./routes/social', 'social');
+const analyticsRoutes = safeLoadRoute('./routes/analytics', 'analytics');
+const aiRoutes = safeLoadRoute('./routes/ai', 'ai');
+const sleepRoutes = safeLoadRoute('./routes/sleep', 'sleep');
+const recipesRoutes = safeLoadRoute('./routes/recipes', 'recipes');
+const mealPlansRoutes = safeLoadRoute('./routes/mealPlans', 'mealPlans');
+const groceryListRoutes = safeLoadRoute('./routes/groceryList', 'groceryList');
+
 // Import middleware with error handling
-let authenticateToken, errorHandler;
+let authenticateToken, errorHandler, userRateLimiters;
 
 try {
   const authMiddleware = require('./middleware/auth');
   authenticateToken = authMiddleware.authenticateToken;
   const errorHandlerModule = require('./middleware/errorHandler');
   errorHandler = errorHandlerModule.errorHandler;
+  userRateLimiters = require('./middleware/userRateLimit');
 } catch (error) {
   console.error('Error loading middleware:', error.message);
   // Create basic middleware for development
@@ -47,6 +71,11 @@ try {
   errorHandler = (err, req, res, next) => {
     console.error('Error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  };
+  userRateLimiters = {
+    standardUserRateLimiter: (req, res, next) => next(),
+    aggressiveUserRateLimiter: (req, res, next) => next(),
+    lenientUserRateLimiter: (req, res, next) => next()
   };
 }
 
@@ -93,10 +122,37 @@ app.get('/api/db-status', (req, res) => {
 });
 
 // Security middleware
-app.use(helmet());
+// Allow loading uploaded media from a different origin (e.g., app on :19006 loading from backend :5000)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 app.use(compression());
 
-// Rate limiting
+// CORS configuration (dev-friendly) – must be BEFORE anything that may reject the request
+const allowedOrigins = (process.env.CORS_ORIGIN?.split(',') || []).map(o => o.trim());
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Always allow non-browser / same-origin requests
+    if (!origin) return callback(null, true);
+    // Allow any localhost / 127.0.0.1 / LAN IP for dev convenience
+    if (/^(http:\/\/|https:\/\/)localhost:\d+/.test(origin) || /^(http:\/\/|https:\/\/)127\.0\.0\.1:\d+/.test(origin) || /^(http:\/\/|https:\/\/)192\.168\.\d+\.\d+:\d+/.test(origin)) {
+      return callback(null, true);
+    }
+    // Allow explicitly whitelisted origins
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS not allowed for this origin'), false);
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+}));
+
+// Handle preflight requests quickly
+app.options('*', cors());
+
+// Rate limiting – needs to come AFTER CORS so preflight receives headers
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
@@ -104,13 +160,9 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// CORS configuration
-app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || "http://localhost:19006",
-  credentials: true
-}));
-
 // Body parsing middleware
+// Use raw body for webhook signature validation
+app.use('/api/media/webhook/cloudinary', express.raw({ type: '*/*', limit: '2mb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -137,13 +189,26 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', authenticateToken, userRoutes);
-app.use('/api/workouts', authenticateToken, workoutRoutes);
-app.use('/api/nutrition', authenticateToken, nutritionRoutes);
-app.use('/api/progress', authenticateToken, progressRoutes);
-app.use('/api/social', authenticateToken, socialRoutes);
-app.use('/api/analytics', authenticateToken, analyticsRoutes);
+app.use('/api/users', authenticateToken, userRateLimiters.standardUserRateLimiter, userRoutes);
+app.use('/api/workouts', authenticateToken, userRateLimiters.standardUserRateLimiter, workoutRoutes);
+app.use('/api/nutrition', authenticateToken, userRateLimiters.standardUserRateLimiter, nutritionRoutes);
+app.use('/api/progress', authenticateToken, userRateLimiters.standardUserRateLimiter, progressRoutes);
+app.use('/api/social', authenticateToken, userRateLimiters.standardUserRateLimiter, socialRoutes);
+app.use('/api/analytics', authenticateToken, userRateLimiters.lenientUserRateLimiter, analyticsRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/sleep', sleepRoutes);
+app.use('/api/nutrition/recipes', authenticateToken, userRateLimiters.standardUserRateLimiter, recipesRoutes);
+app.use('/api/nutrition/meal-plans', authenticateToken, userRateLimiters.standardUserRateLimiter, mealPlansRoutes);
+app.use('/api/nutrition/grocery-list', authenticateToken, userRateLimiters.standardUserRateLimiter, groceryListRoutes);
+try {
+  const uploadRoutes = require('./routes/upload');
+  // Upload routes already authenticate internally; mount without extra auth wrapper
+  app.use('/api/upload', uploadRoutes);
+  // Serve uploaded files from a stable public path
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+} catch (e) {
+  console.warn('Upload routes not loaded:', e.message);
+}
 try {
   const plansRoutes = require('./routes/plans');
   app.use('/api/plans', authenticateToken, plansRoutes);
@@ -155,6 +220,56 @@ try {
   app.use('/api/meals', authenticateToken, mealsRoutes);
 } catch (e) {
   console.warn('Meals routes not loaded:', e.message);
+}
+try {
+  const discoverRoutes = require('./routes/discover');
+  app.use('/api/discover', authenticateToken, discoverRoutes);
+} catch (e) {
+  console.warn('Discover routes not loaded:', e.message);
+}
+try {
+  const coachesRoutes = require('./routes/coaches');
+  app.use('/api/coaches', authenticateToken, coachesRoutes);
+} catch (e) {
+  console.warn('Coaches routes not loaded:', e.message);
+}
+try {
+  const creatorRoutes = require('./routes/creators');
+  app.use('/api/creators', authenticateToken, creatorRoutes);
+} catch (e) {
+  console.warn('Creators routes not loaded:', e.message);
+}
+try {
+  const legacyCreatorRoutes = require('./routes/creator');
+  app.use('/api/creator', authenticateToken, legacyCreatorRoutes);
+} catch (e) {
+  console.warn('Legacy creator routes not loaded:', e.message);
+}
+try {
+  const commerceRoutes = require('./routes/commerce');
+  app.use('/api/commerce', authenticateToken, commerceRoutes);
+} catch (e) {
+  console.warn('Commerce routes not loaded:', e.message);
+}
+try {
+  const mediaRoutes = require('./routes/media');
+  app.use('/api/media', authenticateToken, mediaRoutes);
+} catch (e) {
+  console.warn('Media routes not loaded:', e.message);
+}
+try {
+  const notificationsRoutes = require('./routes/notifications');
+  app.use('/api/notifications', authenticateToken, notificationsRoutes);
+} catch (e) {
+  console.warn('Notifications routes not loaded:', e.message);
+}
+
+// Start cleanup job
+try {
+  const { startUploadCleanupJob } = require('./services/uploadCleanup');
+  startUploadCleanupJob();
+} catch (e) {
+  console.warn('Cleanup job not started:', e.message);
 }
 
 // Socket.IO connection handling
@@ -193,11 +308,18 @@ app.use('*', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT, 10) || 5000;
 
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`wServer running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use. Please free the port or set PORT env variable to a different number.`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
 });
 
 // Graceful shutdown

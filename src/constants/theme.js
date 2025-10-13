@@ -145,6 +145,8 @@ export const SHADOWS = {
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 2,
+    // Web-only CSS shadow for RN Web
+    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
   },
   medium: {
     shadowColor: COLORS.utility.shadow,
@@ -155,6 +157,8 @@ export const SHADOWS = {
     shadowOpacity: 0.3,
     shadowRadius: 4.65,
     elevation: 4,
+    // Web-only CSS shadow for RN Web
+    boxShadow: '0 6px 16px rgba(0,0,0,0.3)',
   },
   large: {
     shadowColor: COLORS.utility.shadow,
@@ -165,6 +169,8 @@ export const SHADOWS = {
     shadowOpacity: 0.37,
     shadowRadius: 7.49,
     elevation: 6,
+    // Web-only CSS shadow for RN Web
+    boxShadow: '0 12px 24px rgba(0,0,0,0.35)',
   },
   glow: {
     // For neon glow effects
@@ -176,6 +182,8 @@ export const SHADOWS = {
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 10,
+    // Web-only CSS shadow for RN Web
+    boxShadow: '0 0 24px rgba(0,255,255,0.35)',
   },
 };
 

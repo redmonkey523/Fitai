@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import Toast from 'react-native-toast-message';
 import { 
   initializeGoogleSignIn, 
@@ -8,8 +8,11 @@ import {
   loginWithEmail, 
   saveSession, 
   loadSession, 
-  clearSession 
+  clearSession,
+  getCurrentUser,
+  updateUserProfile
 } from '../services/authService';
+import { COMMERCE_ENTITLEMENTS_ENABLED } from '../config/api';
 
 const AuthContext = createContext();
 
@@ -23,8 +26,10 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [entitlements, setEntitlements] = useState({ pro: false, programs: [], isAdmin: false });
 
   // Initialize auth on app start
   useEffect(() => {
@@ -41,9 +46,17 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Load existing session
-      const savedUser = await loadSession();
-      if (savedUser) {
-        setUser(savedUser);
+      const session = await loadSession();
+      if (session) {
+        setUser(session.user);
+        setToken(session.token);
+        try {
+          if (COMMERCE_ENTITLEMENTS_ENABLED) {
+            const api = (await import('../services/api')).default;
+            const e = await api.getEntitlements();
+            if (e?.success && e.data) setEntitlements(e.data);
+          }
+        } catch {}
       }
     } catch (error) {
       console.warn('Auth initialization error:', error.message);
@@ -58,8 +71,9 @@ export const AuthProvider = ({ children }) => {
     try {
       const result = await signInWithGoogle();
       if (result.success) {
-        await saveSession(result.user);
+        await saveSession(result.user, result.token);
         setUser(result.user);
+        setToken(result.token);
         Toast.show({
           type: 'success',
           text1: 'Welcome!',
@@ -102,12 +116,13 @@ export const AuthProvider = ({ children }) => {
     try {
       const result = await registerWithEmail(email, password, firstName, lastName);
       if (result.success) {
-        await saveSession(result.user);
+        await saveSession(result.user, result.token, result.refreshToken);
         setUser(result.user);
+        setToken(result.token);
         Toast.show({
           type: 'success',
           text1: 'Account Created!',
-          text2: 'You\'re in—let\'s build your plan.',
+          text2: 'Welcome to FitAI!',
         });
       }
     } catch (error) {
@@ -138,8 +153,16 @@ export const AuthProvider = ({ children }) => {
     try {
       const result = await loginWithEmail(email, password);
       if (result.success) {
-        await saveSession(result.user);
+        await saveSession(result.user, result.token, result.refreshToken);
         setUser(result.user);
+        setToken(result.token);
+        try {
+          if (COMMERCE_ENTITLEMENTS_ENABLED) {
+            const api = (await import('../services/api')).default;
+            const e = await api.getEntitlements();
+            if (e?.success) setEntitlements(e.data);
+          }
+        } catch {}
         Toast.show({
           type: 'success',
           text1: 'Welcome Back!',
@@ -177,6 +200,7 @@ export const AuthProvider = ({ children }) => {
       // Clear local session
       await clearSession();
       setUser(null);
+      setToken(null);
       
       Toast.show({
         type: 'success',
@@ -188,17 +212,108 @@ export const AuthProvider = ({ children }) => {
       // Still clear local session even if Google sign out fails
       await clearSession();
       setUser(null);
+      setToken(null);
     }
   };
 
+  const updateProfile = async (profileData) => {
+    try {
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+      
+      const updatedUser = await updateUserProfile(token, profileData);
+      setUser(updatedUser);
+      
+      // Update stored session
+      await saveSession(updatedUser, token);
+      
+      Toast.show({
+        type: 'success',
+        text1: 'Profile Updated',
+        text2: 'Your profile has been saved successfully!',
+      });
+      
+      return updatedUser;
+    } catch (error) {
+      console.error('Update profile error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Update Failed',
+        text2: error.message || 'Failed to update profile',
+      });
+      throw error;
+    }
+  };
+
+  const refreshUser = useCallback(async () => {
+    try {
+      if (!token) {
+        return null;
+      }
+      
+      const freshUser = await getCurrentUser(token);
+      setUser(freshUser);
+      
+      // Update stored session
+      await saveSession(freshUser, token);
+      try {
+        if (COMMERCE_ENTITLEMENTS_ENABLED) {
+          const api = (await import('../services/api')).default;
+          const e = await api.getEntitlements();
+          if (e?.success) setEntitlements(e.data);
+        }
+      } catch {}
+      
+      return freshUser;
+    } catch (error) {
+      console.error('Refresh user error:', error);
+      
+      // Only clear session if it's definitely an authentication error
+      // Check for 401, 403, or explicit unauthorized messages
+      const isAuthError = error.message.includes('401') || 
+                         error.message.includes('403') || 
+                         error.message.includes('Unauthorized') ||
+                         error.message.includes('Token expired') ||
+                         error.message.includes('Invalid token');
+      
+      // Handle specific error types from API
+      const isServerError = error.message.includes('Server returned an unexpected response') ||
+                           error.message.includes('Network error') ||
+                           error.message.includes('Failed to fetch');
+      
+      if (isAuthError) {
+        console.log('Authentication token expired or invalid, logging out user');
+        await clearSession();
+        setUser(null);
+        setToken(null);
+        Toast.show({
+          type: 'info',
+          text1: 'Session Expired',
+          text2: 'Please log in again to continue',
+        });
+      } else if (isServerError) {
+        console.log('Temporary server error, keeping user logged in:', error.message);
+        // Don't show toast for temporary errors on background refresh
+      } else {
+        console.log('Temporary refresh error, keeping user logged in:', error.message);
+      }
+      return null;
+    }
+  }, [token]);
+
   const value = {
     user,
+    token,
     isLoading,
     isAuthenticating,
     handleGoogleSignInPress,
     handleEmailSignUpPress,
     handleEmailLoginPress,
     handleLogout,
+    updateProfile,
+    refreshUser,
+    entitlements,
   };
 
   return (

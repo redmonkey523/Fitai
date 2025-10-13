@@ -1,0 +1,118 @@
+graph TB
+    %% FitAI Information Architecture (Proposed - 5 Tabs Max)
+    
+    Start[App Launch] --> Auth{Logged In?}
+    Auth -->|No| AuthScreen[Auth Screen<br/>Login/Register]
+    Auth -->|Yes| Main[Main App<br/>Bottom Tabs]
+    
+    AuthScreen --> Main
+    
+    %% ===== BOTTOM TABS (5 MAX) =====
+    Main --> Tab1[🏠 Home]
+    Main --> Tab2[🔍 Discover]
+    Main --> Tab3[✨ Create]
+    Main --> Tab4[📊 Progress]
+    Main --> Tab5[👤 Profile]
+    
+    %% ===== HOME TAB =====
+    Tab1 --> HomeScreen[Home Screen<br/>Dashboard]
+    HomeScreen --> QuickNutrition[Nutrition Widget<br/>View calories/macros]
+    HomeScreen --> QuickWorkout[Workout Widget<br/>Today's workout]
+    HomeScreen --> Nutrition[Nutrition Detail<br/>Full nutrition screen]
+    HomeScreen --> Workouts[Workouts & Plans<br/>Merged library]
+    
+    QuickNutrition --> Nutrition
+    QuickWorkout --> Workouts
+    
+    Nutrition --> CameraScanner[Camera Scanner<br/>Food/barcode recognition]
+    Nutrition --> ManualLog[Manual Food Log]
+    
+    Workouts --> WorkoutDetail[Workout Detail<br/>Exercise list]
+    Workouts --> PlanDetail[Plan Detail<br/>Multi-week program]
+    Workouts --> StartWorkout[Start Workout<br/>In-progress tracking]
+    
+    %% ===== DISCOVER TAB =====
+    Tab2 --> DiscoverScreen[Discover Screen<br/>Browse content]
+    DiscoverScreen --> DiscoverHome[Home Feed<br/>Curated spotlight]
+    DiscoverScreen --> DiscoverCoaches[Coaches Tab<br/>Browse all coaches]
+    DiscoverScreen --> DiscoverPrograms[Programs Tab<br/>Browse all programs]
+    
+    DiscoverCoaches --> CoachProfile[Coach Profile<br/>Bio, programs, stats]
+    DiscoverPrograms --> ProgramDetail[Program Detail<br/>Overview, sessions]
+    
+    CoachProfile --> Subscribe[Subscribe Action<br/>Follow coach]
+    ProgramDetail --> AddToLibrary[Add to Library<br/>Save to Workouts]
+    
+    %% ===== CREATE TAB (NEW - UNIFIED CREATOR) =====
+    Tab3 --> CreateScreen[Create Hub<br/>Creator Studio]
+    CreateScreen --> QuickCreate[Quick Create<br/>New workout/program]
+    CreateScreen --> Drafts[Drafts<br/>Work in progress]
+    CreateScreen --> CreatorAnalytics[Analytics<br/>Views, engagement]
+    CreateScreen --> MediaLibrary[Media Library<br/>Uploaded assets]
+    
+    QuickCreate --> NewWorkout[New Workout Editor<br/>Add exercises]
+    QuickCreate --> NewProgram[New Program Editor<br/>Add sessions]
+    
+    Drafts --> EditDraft[Edit Draft<br/>Resume editing]
+    
+    MediaLibrary --> UploadMedia[Upload Media<br/>Photo/video]
+    MediaLibrary --> ClipEditor[Video Clip Editor<br/>Trim, effects]
+    MediaLibrary --> TimelineEditor[Timeline Editor<br/>Multi-clip composition]
+    
+    CreateScreen --> CreatorSettings[Creator Settings<br/>Profile, monetization]
+    CreatorSettings --> CreatorApply[Apply to Creator Program<br/>Verification]
+    
+    %% ===== PROGRESS TAB =====
+    Tab4 --> ProgressScreen[Progress Screen<br/>Tracking & stats]
+    ProgressScreen --> Charts[Progress Charts<br/>Weight, strength, etc]
+    ProgressScreen --> Goals[Goals & Milestones<br/>Set targets]
+    ProgressScreen --> Photos[Progress Photos<br/>Before/after gallery]
+    ProgressScreen --> History[Workout History<br/>Past sessions]
+    
+    %% ===== PROFILE TAB =====
+    Tab5 --> ProfileScreen[Profile Screen<br/>User settings]
+    ProfileScreen --> EditProfile[Edit Profile<br/>Personal info]
+    ProfileScreen --> ProfilePhoto[Profile Photo<br/>Crop avatar]
+    ProfileScreen --> Security[Security Settings<br/>Password, privacy]
+    ProfileScreen --> Notifications[Notification Settings<br/>Preferences]
+    ProfileScreen --> Support[Help & Support<br/>Contact, FAQ]
+    ProfileScreen --> About[About<br/>App info]
+    ProfileScreen --> Logout[Sign Out]
+    
+    %% ===== DEEP LINKS (from anywhere) =====
+    style DeepLinks fill:#1a1a24,stroke:#00ffff,stroke-width:2px
+    DeepLinks[🔗 Deep Links<br/>Universal access] -.-> Nutrition
+    DeepLinks -.-> Workouts
+    DeepLinks -.-> CreateScreen
+    DeepLinks -.-> CoachProfile
+    DeepLinks -.-> ProgramDetail
+    
+    %% ===== MODALS & OVERLAYS =====
+    style Modals fill:#16161e,stroke:#ff00ff,stroke-width:2px,stroke-dasharray: 5 5
+    Modals[Modals/Sheets] -.-> NewWorkout
+    Modals -.-> EditProfile
+    Modals -.-> CameraScanner
+    Modals -.-> Security
+    
+    %% ===== KEY DECISIONS =====
+    %% 1. Nutrition moved under Home (widget + deep link)
+    %% 2. Workouts & Plans merged (no separate Plans tab)
+    %% 3. Creator unified into single "Create" tab
+    %% 4. Social feed removed (FEATURE_FEED=false)
+    %% 5. CoachChannel merged into CoachProfile
+    
+    %% ===== NAVIGATION DEPTHS =====
+    %% Scan food: Home → Nutrition → Camera = 2 taps ✅
+    %% Start workout: Home → Workouts → Detail → Start = 3 taps ✅
+    %% Subscribe coach: Discover → Coaches → Profile → Subscribe = 3 taps ✅
+    %% Create content: Create (direct tab) = 1 tap ✅
+    %% Edit profile: Profile → Edit = 2 taps ✅
+    
+    classDef tabNode fill:#00ffff22,stroke:#00ffff,stroke-width:3px,color:#ffffff
+    classDef screenNode fill:#121218,stroke:#b8b8c0,stroke-width:2px,color:#ffffff
+    classDef actionNode fill:#16161e,stroke:#6e6e78,stroke-width:1px,color:#b8b8c0
+    
+    class Tab1,Tab2,Tab3,Tab4,Tab5 tabNode
+    class HomeScreen,DiscoverScreen,CreateScreen,ProgressScreen,ProfileScreen screenNode
+    class QuickNutrition,QuickWorkout,QuickCreate,Subscribe,AddToLibrary actionNode
+

@@ -127,114 +127,6 @@ router.post('/barcode-scan',
 );
 
 /**
- * @route POST /api/ai/demo-food
- * @desc Get demo food recognition results (for testing)
- * @access Private
- */
-router.post('/demo-food',
-  authenticateToken,
-  async (req, res) => {
-    try {
-      console.log('Processing demo food recognition');
-
-      // Simulate AI processing delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const foodResults = await aiService.simulateAIFoodRecognition('demo');
-
-      res.json({
-        success: true,
-        data: foodResults
-      });
-
-    } catch (error) {
-      console.error('Demo food recognition error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to process demo food',
-        error: error.message
-      });
-    }
-  }
-);
-
-/**
- * @route POST /api/ai/demo-barcode
- * @desc Get demo barcode scan results (for testing)
- * @access Private
- */
-router.post('/demo-barcode',
-  authenticateToken,
-  async (req, res) => {
-    try {
-      console.log('Processing demo barcode scan');
-
-      // Simulate barcode scanning delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const productData = await aiService.simulateBarcodeLookup();
-
-      res.json({
-        success: true,
-        data: productData
-      });
-
-    } catch (error) {
-      console.error('Demo barcode scan error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to process demo barcode',
-        error: error.message
-      });
-    }
-  }
-);
-
-/**
- * @route GET /api/ai/demo/food
- * @desc Get demo food data (for testing)
- * @access Public
- */
-router.get('/demo/food', async (req, res) => {
-  try {
-    const demoFood = aiService.getDemoFood ? await aiService.getDemoFood() : await aiService.simulateAIFoodRecognition('demo');
-    res.json({
-      success: true,
-      data: demoFood
-    });
-  } catch (error) {
-    console.error('Demo food error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get demo food data',
-      error: error.message
-    });
-  }
-});
-
-/**
- * @route GET /api/ai/demo/barcode
- * @desc Get demo barcode data (for testing)
- * @access Public
- */
-router.get('/demo/barcode', async (req, res) => {
-  try {
-    const demoBarcode = aiService.getDemoBarcode ? await aiService.getDemoBarcode() : await aiService.simulateBarcodeLookup();
-    res.json({
-      success: true,
-      data: demoBarcode
-    });
-  } catch (error) {
-    console.error('Demo barcode error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get demo barcode data',
-      error: error.message
-    });
-  }
-});
-
-/**
  * @route GET /api/ai/health
  * @desc Check AI service health
  * @access Public
@@ -250,8 +142,7 @@ router.get('/health', async (req, res) => {
       openai: !!openaiApiKey,
       googleVision: !!googleVisionApiKey,
       calorieMama: !!calorieMamaApiKey,
-      openFoodFacts: true, // Always available (free API)
-      demo: true // Always available
+      openFoodFacts: true // Always available (free API)
     };
 
     res.json({

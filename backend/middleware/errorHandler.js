@@ -70,10 +70,29 @@ const errorHandler = (err, req, res, next) => {
   const statusCode = error.statusCode || 500;
   const message = error.message || 'Server Error';
 
-  // Don't send stack trace in production
+  // Set Content-Type header
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+  // Add Retry-After header for rate limiting
+  if (statusCode === 429) {
+    res.setHeader('Retry-After', '60'); // 60 seconds
+  }
+
+  // Map status code to error code
+  const errorCode = statusCode === 400 ? 'BAD_REQUEST'
+    : statusCode === 401 ? 'UNAUTHORIZED'
+    : statusCode === 403 ? 'FORBIDDEN'
+    : statusCode === 404 ? 'NOT_FOUND'
+    : statusCode === 429 ? 'TOO_MANY_REQUESTS'
+    : statusCode === 503 ? 'SERVICE_UNAVAILABLE'
+    : 'INTERNAL_ERROR';
+
+  // Format response according to spec: {error: {code, message}}
   const response = {
-    success: false,
-    message,
+    error: {
+      code: errorCode,
+      message
+    },
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   };
 
@@ -103,9 +122,22 @@ const notFound = (req, res, next) => {
   next(error);
 };
 
+// Request validation middleware
+const validateRequest = (req, res, next) => {
+  // Basic validation - can be expanded
+  if (req.method === 'POST' && !req.body && Object.keys(req.body || {}).length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Request body is required'
+    });
+  }
+  next();
+};
+
 module.exports = {
   errorHandler,
   asyncHandler,
   AppError,
-  notFound
+  notFound,
+  validateRequest
 };

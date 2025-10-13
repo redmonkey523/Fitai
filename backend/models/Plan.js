@@ -10,7 +10,8 @@ const sessionSchema = new mongoose.Schema({
     sets: Number,
     reps: Number,
     weight: Number
-  }]
+  }],
+  videoUrl: { type: String, trim: true }
 });
 
 const phaseSchema = new mongoose.Schema({
@@ -26,7 +27,23 @@ const planSchema = new mongoose.Schema({
   phases: [phaseSchema],
   tags: [{ type: String, trim: true, lowercase: true }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  isPublic: { type: Boolean, default: true }
+  isPublic: { type: Boolean, default: true },
+  // Program monetization extensions
+  coachId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coach' },
+  price: { type: Number, default: 0 },
+  currency: { type: String, default: 'USD' },
+  isFreePreview: { type: Boolean, default: true },
+  isPublished: { type: Boolean, default: false },
+  badges: [{ type: String, trim: true }],
+  media: { hero: String, trailerUrl: String },
+  metrics: {
+    completion7d: { type: Number, default: 0 },
+    saveRate: { type: Number, default: 0 },
+    commentVelocity: { type: Number, default: 0 },
+    retentionW3: { type: Number, default: 0 },
+    refundRate: { type: Number, default: 0 },
+    reportRate: { type: Number, default: 0 }
+  }
 }, { timestamps: true });
 
 planSchema.index({ goal: 1, difficulty: 1 });

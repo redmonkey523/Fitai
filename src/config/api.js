@@ -1,11 +1,18 @@
-// API Configuration - Environment-driven (no literals)
+// API Configuration - Environment-driven with smart LAN fallback for mobile
 const resolveApiBaseUrl = () => {
   let resolved = undefined;
+  let devHost = undefined;
   try {
     const Constants = require('expo-constants').default;
     // Prefer app.config.js runtime extra.apiUrl
-    if (Constants?.expoConfig?.extra?.apiUrl) {
-      resolved = Constants.expoConfig.extra.apiUrl;
+    const extraUrl = Constants?.expoConfig?.extra?.apiUrl;
+    if (extraUrl && typeof extraUrl === 'string' && !/^\$\{.+\}$/.test(extraUrl)) {
+      resolved = extraUrl;
+    }
+    // Derive dev host (LAN) from hostUri/debuggerHost for physical devices
+    const rawHostUri = Constants?.expoConfig?.hostUri || Constants?.manifest?.debuggerHost || Constants?.manifest2?.extra?.expoClient?.hostUri;
+    if (rawHostUri && typeof rawHostUri === 'string') {
+      devHost = String(rawHostUri).split(':')[0];
     }
   } catch (err) {
     // non-Expo runtime
@@ -13,10 +20,22 @@ const resolveApiBaseUrl = () => {
   // Env fallbacks
   resolved =
     resolved ||
-    process.env.EXPO_PUBLIC_API_URL ||
+    (process.env.EXPO_PUBLIC_API_URL && !/^\$\{.+\}$/.test(process.env.EXPO_PUBLIC_API_URL) ? process.env.EXPO_PUBLIC_API_URL : undefined) ||
     process.env.REACT_APP_API_URL ||
     process.env.API_BASE_URL ||
-    '';
+    (process.env.NODE_ENV !== 'production' ? 'http://localhost:5000/api' : '');
+
+  // On native mobile, replace localhost with LAN IP if available
+  try {
+    const { Platform } = require('react-native');
+    if (resolved && /^(http|https):\/\/(localhost|127\.0\.0\.1)/.test(resolved) && Platform?.OS !== 'web' && devHost) {
+      const withoutProto = resolved.replace(/^(http|https):\/\//, '');
+      const tail = withoutProto.replace(/^(localhost|127\.0\.0\.1)/, '');
+      resolved = `http://${devHost}${tail}`;
+    }
+  } catch {
+    // ignore
+  }
 
   if (!resolved) {
     console.warn('API base URL not set. Set EXPO_PUBLIC_API_URL for mobile/web or API_BASE_URL for backend.');
@@ -59,17 +78,17 @@ export const API_ENDPOINTS = {
   
   // Nutrition
   NUTRITION: {
-    LOG: '/nutrition/log',
-    HISTORY: '/nutrition/history',
+    LOG: '/nutrition/entries',
+    HISTORY: '/nutrition/entries',
     GOALS: '/nutrition/goals',
     SEARCH: '/nutrition/search',
   },
   
   // Progress
   PROGRESS: {
-    TRACK: '/progress/track',
-    HISTORY: '/progress/history',
-    PHOTOS: '/progress/photos',
+    TRACK: '/progress/entries',
+    HISTORY: '/progress/entries',
+    PHOTOS: '/upload/progress-photos',
     MEASUREMENTS: '/progress/measurements',
   },
   
@@ -91,16 +110,16 @@ export const API_ENDPOINTS = {
   
   // AI
   AI: {
-    SCAN_FOOD: '/ai/scan-food',
-    SCAN_BARCODE: '/ai/scan-barcode',
+    SCAN_FOOD: '/ai/food-recognition',
+    SCAN_BARCODE: '/ai/barcode-scan',
     RECOMMEND_WORKOUT: '/ai/recommend-workout',
     ANALYZE_PROGRESS: '/ai/analyze-progress',
   },
   
   // Upload
   UPLOAD: {
-    IMAGE: '/upload/image',
-    PROGRESS_PHOTO: '/upload/progress-photo',
+    IMAGE: '/upload/single',
+    PROGRESS_PHOTO: '/upload/progress-photos',
   },
 };
 
@@ -113,3 +132,9 @@ export const RETRY_CONFIG = {
   RETRY_DELAY: 1000,
   BACKOFF_MULTIPLIER: 2,
 };
+
+// Feature flags
+export const COMMERCE_ENTITLEMENTS_ENABLED = (
+  String(process.env.EXPO_PUBLIC_ENABLE_COMMERCE || '').toLowerCase() === '1' ||
+  String(process.env.EXPO_PUBLIC_ENABLE_COMMERCE || '').toLowerCase() === 'true'
+);

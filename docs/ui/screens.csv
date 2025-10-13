@@ -1,0 +1,30 @@
+route,title,primary_action,secondary_action,status,issues,recommended_change
+Auth,Login/Register,Sign in with email,Sign up,OK,None,Keep as-is
+Home,Dashboard,View nutrition/workout summary,Navigate to detail screens,OK,"Too many quick actions, cluttered",Simplify quick actions to 2-3 max
+Discover,Browse Content,Subscribe to coaches,View programs,OK,"Too many tabs (home/trending/coaches/programs), hero image not optimized",Merge tabs to max 3
+Workouts,Workout Library,Start workout,Filter by category,OK,Search + 8 category filters = cognitive overload,Reduce to 3-4 category chips
+Progress,Progress Tracking,View charts,Log progress,OK,Needs content - partially blank,Add goal setting and progress milestones
+Plans,Fitness Plans,View plan detail,None,Confusing,Minimal UI - unclear purpose vs Workouts,MERGE into Workouts or Discover
+Nutrition,Nutrition Tracker,Scan food with camera,Log meal manually,OK,Camera scanner only works in full build (not Expo Go),Add prominent fallback for manual entry
+Social,Social Feed,Like/comment on posts,Create post,Duplicate,FEATURE_FEED flag disabled - screen exists but not used,REMOVE or fully implement feed
+Profile,User Profile,Edit profile info,Upload photo / Create post,OK,Create & Share section duplicates Creator functionality,Move social creation to Creator only
+Creator,Creator Studio,Quick Create (workout/program),View drafts,Confusing,"Duplicate sections (""Drafts"" vs ""Drafts 2""), cluttered with mock data, no clear hierarchy",Major redesign needed (see creator-spec.md)
+CreatorDrafts,Creator Drafts,Edit draft,Delete draft,Blank,No content shown - empty state only,Fill with proper drafts list + empty state
+CreatorAnalytics,Creator Analytics,View stats,Export data,Blank,No analytics shown,Implement basic metrics (views, engagement)
+CreatorApply,Apply to Creator,Submit application,None,OK,Good flow but not linked from main nav,Add to Profile settings
+CreatorProfileEditor,Edit Creator Profile,Save changes,Upload avatar,OK,Duplicate of Profile > Edit Profile,MERGE into Profile screen
+CreatorClipEditor,Video Clip Editor,Trim video,Add effects,OK,Only on Creator path - acceptable,Keep
+CreatorTimelineEditor,Timeline Editor,Arrange clips,Add transitions,OK,Only on Creator path - acceptable,Keep
+CreatorMediaAttach,Attach Media,Select from library,Upload new,OK,Acceptable utility screen,Keep
+NewWorkout,Create Workout,Add exercises,Save as draft,OK,Could be modal instead of full screen,Consider modal version
+NewProgram,Create Program,Add sessions,Save program,Duplicate,Very similar to NewWorkout,MERGE into unified creator flow
+PlanDetail,Plan Details,Start plan,None,OK,Acceptable detail screen,Keep
+ProgramDetail,Program Details,Follow program,View coach,OK,Very similar to PlanDetail,Consider merging or consistent design
+ProgramTemplate,Program Template,Use template,Customize,Confusing,Unclear when this is shown vs ProgramDetail,Clarify or merge
+CoachChannel,Coach Channel,View programs,Follow coach,Duplicate,Similar to CoachProfile,MERGE into CoachProfile
+CoachProfile,Coach Profile,Follow coach,View programs,OK,Good layout,Keep but merge with CoachChannel
+MediaLibrary,Media Library,Select media,Upload new,OK,Useful for creator workflow,Keep
+ProfilePhoto,Profile Photo Editor,Crop and save,Cancel,OK,Modern avatar cropper,Keep
+VoiceWorkout,Voice-Guided Workout,Start audio workout,Pause,Blank,Feature appears incomplete,Remove or complete implementation
+TabNavigator,Bottom Navigation,Navigate between screens,None,Remove,"8 tabs (way over 5 max): Discover, Home, Workouts, Progress, Plans, Nutrition, Creator, Profile",Reduce to 5 tabs max
+

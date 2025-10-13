@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,36 @@ import { Ionicons } from '@expo/vector-icons';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import ProgressBar from '../components/ProgressBar';
+import { apiService, handleApiError } from '../services/api';
+import { FEATURE_FEED } from '../config/flags';
 
 const SocialScreen = () => {
+  // Feature flag check - return disabled state if social feed is disabled
+  if (!FEATURE_FEED) {
+    return (
+      <View style={styles.disabledContainer}>
+        <LinearGradient
+          colors={[COLORS.background.primary, COLORS.background.secondary]}
+          style={styles.disabledGradient}
+        >
+          <Ionicons name="people-outline" size={80} color={COLORS.text.tertiary} />
+          <Text style={styles.disabledTitle}>Social Features Temporarily Disabled</Text>
+          <Text style={styles.disabledText}>
+            Social features including feed, challenges, and friends are currently unavailable. 
+            Focus on your fitness journey with workouts, nutrition tracking, and progress monitoring!
+          </Text>
+          <View style={styles.disabledActions}>
+            <Button
+              title="Go to Workouts"
+              onPress={() => {/* Navigation handled by parent */}}
+              style={styles.disabledButton}
+            />
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
+
   // State for active tab
   const [activeTab, setActiveTab] = useState('feed');
 
@@ -17,6 +45,132 @@ const SocialScreen = () => {
   const [feedItems, setFeedItems] = useState([]);
   const [challenges, setChallenges] = useState([]);
   const [friends, setFriends] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+
+  const loadFeed = async () => {
+    try {
+      const res = await apiService.social.getFeed({ page: 1, limit: 10 });
+      const { activities } = res.data.data;
+      const mapped = activities.map((a) => ({
+        id: a.id,
+        user: `${a.user?.firstName || 'User'} ${a.user?.lastName || ''}`.trim(),
+        time: new Date(a.timestamp).toLocaleString(),
+        content:
+          a.type === 'workout_completed'
+            ? `Completed ${a.data.workoutName} • ${a.data.duration} min • ${a.data.caloriesBurned} kcal`
+            : a.type === 'goal_achieved'
+            ? a.data.achievement
+            : a.type,
+        type: a.type.includes('workout') ? 'workout' : a.type.includes('goal') ? 'achievement' : 'progress',
+        isLiked: false,
+        likes: a.likes || 0,
+        comments: a.comments || 0,
+      }));
+      setFeedItems(mapped);
+    } catch (e) {
+      Alert.alert('Feed', handleApiError(e));
+    }
+  };
+
+  const loadChallenges = async () => {
+    try {
+      const res = await apiService.social.getChallenges({ status: 'active', limit: 10 });
+      const list = res.data.data.map((c) => ({
+        id: c.id,
+        title: c.title,
+        participants: c.participants,
+        currentDay: 1,
+        days: c.duration,
+        isJoined: false,
+      }));
+      setChallenges(list);
+    } catch (e) {
+      Alert.alert('Challenges', handleApiError(e));
+    }
+  };
+
+  const handleJoinChallenge = async (challengeId) => {
+    try {
+      await apiService.social.joinChallenge(challengeId);
+      setChallenges((prev) => prev.map((c) => (c.id === challengeId ? { ...c, isJoined: true } : c)));
+      Alert.alert('Challenge', 'Joined successfully');
+    } catch (e) {
+      Alert.alert('Join Challenge', handleApiError(e));
+    }
+  };
+
+  const loadFriends = async () => {
+    try {
+      const res = await apiService.user.getFriends();
+      const list = (res.data.data || []).map((u) => ({
+        id: u._id,
+        name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+        status: 'Friend',
+      }));
+      setFriends(list);
+    } catch (e) {
+      Alert.alert('Friends', handleApiError(e));
+    }
+  };
+
+  const searchUsers = async (query) => {
+    try {
+      if (!query || query.trim().length < 2) return setSearchResults([]);
+      setLoadingSearch(true);
+      const res = await apiService.user.searchUsers(query.trim(), 10);
+      setSearchResults(res.data.data || []);
+    } catch (e) {
+      Alert.alert('Search', handleApiError(e));
+    } finally {
+      setLoadingSearch(false);
+    }
+  };
+
+  const sendFriendRequest = async (userId) => {
+    try {
+      await apiService.user.sendFriendRequest(userId);
+      Alert.alert('Friend Request', 'Request sent');
+    } catch (e) {
+      Alert.alert('Friend Request', handleApiError(e));
+    }
+  };
+
+  const handleLike = async (activityId) => {
+    try {
+      await apiService.social.likeActivity(activityId);
+      setFeedItems((items) =>
+        items.map((it) =>
+          it.id === activityId
+            ? { ...it, isLiked: true, likes: (it.likes || 0) + 1 }
+            : it
+        )
+      );
+    } catch (e) {
+      Alert.alert('Like', handleApiError(e));
+    }
+  };
+
+  const handleComment = async (activityId) => {
+    try {
+      const content = 'Nice work!';
+      await apiService.social.commentActivity(activityId, content);
+      setFeedItems((items) =>
+        items.map((it) =>
+          it.id === activityId
+            ? { ...it, comments: (it.comments || 0) + 1 }
+            : it
+        )
+      );
+      Alert.alert('Comment', 'Comment posted');
+    } catch (e) {
+      Alert.alert('Comment', handleApiError(e));
+    }
+  };
+
+  useEffect(() => {
+    loadFeed();
+  }, []);
 
   // Render tab content based on active tab
   const renderTabContent = () => {
@@ -91,7 +245,7 @@ const SocialScreen = () => {
               </View>
               
               <View style={styles.feedActions}>
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(item.id)}>
                   <Ionicons 
                     name={item.isLiked ? "heart" : "heart-outline"} 
                     size={20} 
@@ -100,7 +254,7 @@ const SocialScreen = () => {
                   <Text style={styles.actionText}>{item.likes}</Text>
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleComment(item.id)}>
                   <Ionicons name="chatbubble-outline" size={20} color={COLORS.text.secondary} />
                   <Text style={styles.actionText}>{item.comments}</Text>
                 </TouchableOpacity>
@@ -123,13 +277,13 @@ const SocialScreen = () => {
               <Button
                 type="primary"
                 label="FIND FRIENDS"
-                onPress={() => setActiveTab('friends')}
+                onPress={() => { setActiveTab('friends'); loadFriends(); }}
                 style={styles.emptyStateButton}
               />
               <Button
                 type="secondary"
                 label="JOIN CHALLENGES"
-                onPress={() => setActiveTab('challenges')}
+                onPress={() => { setActiveTab('challenges'); loadChallenges(); }}
                 style={styles.emptyStateButton}
               />
             </View>
@@ -169,14 +323,22 @@ const SocialScreen = () => {
                         type="outline"
                         label="VIEW PROGRESS"
                         size="sm"
-                        onPress={() => {}}
+                        onPress={async () => {
+                          try {
+                            const res = await apiService.social.getChallengeProgress(challenge.id);
+                            const p = res.data.data;
+                            Alert.alert('Challenge Progress', `Progress: ${p.progress}%`);
+                          } catch (e) {
+                            Alert.alert('Progress', handleApiError(e));
+                          }
+                        }}
                       />
                     ) : (
                       <Button
                         type="primary"
                         label="JOIN"
                         size="sm"
-                        onPress={() => {}}
+                        onPress={() => handleJoinChallenge(challenge.id)}
                       />
                     )}
                   </View>
@@ -193,7 +355,7 @@ const SocialScreen = () => {
               <Button
                 type="primary"
                 label="BROWSE CHALLENGES"
-                onPress={() => {}}
+                onPress={loadChallenges}
                 style={styles.emptyStateButton}
               />
             </View>
@@ -220,7 +382,7 @@ const SocialScreen = () => {
                 type="secondary"
                 label="JOIN"
                 size="sm"
-                onPress={() => {}}
+                onPress={() => handleJoinChallenge('1')}
               />
             </View>
             
@@ -239,7 +401,7 @@ const SocialScreen = () => {
                 type="secondary"
                 label="JOIN"
                 size="sm"
-                onPress={() => {}}
+                onPress={() => handleJoinChallenge('2')}
               />
             </View>
             
@@ -258,7 +420,7 @@ const SocialScreen = () => {
                 type="secondary"
                 label="JOIN"
                 size="sm"
-                onPress={() => {}}
+                onPress={() => handleJoinChallenge('3')}
               />
             </View>
           </View>
@@ -309,13 +471,51 @@ const SocialScreen = () => {
               <Button
                 type="primary"
                 label="FIND FRIENDS"
-                onPress={() => {}}
+                onPress={loadFriends}
                 style={styles.emptyStateButton}
               />
             </View>
           )}
         </Card>
         
+        <Card title="Find Friends" style={styles.suggestedFriendsCard}>
+          <View style={styles.searchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.searchLabel}>Search by name or email</Text>
+            </View>
+          </View>
+          <View style={{ marginTop: SIZES.spacing.sm }}>
+            <TouchableOpacity
+              style={styles.searchButton}
+              onPress={() => searchUsers('john')}
+            >
+              <Ionicons name="search" size={16} color={COLORS.text.primary} />
+              <Text style={styles.searchButtonText}>{loadingSearch ? 'Searching…' : 'Quick Search: john'}</Text>
+            </TouchableOpacity>
+          </View>
+          {searchResults.length > 0 && (
+            <View style={{ marginTop: SIZES.spacing.md }}>
+              {searchResults.map((u) => (
+                <View key={u._id} style={styles.suggestedFriendItem}>
+                  <View style={styles.suggestedFriendAvatar}>
+                    <Ionicons name="person" size={20} color={COLORS.text.tertiary} />
+                  </View>
+                  <View style={styles.suggestedFriendInfo}>
+                    <Text style={styles.suggestedFriendName}>{`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}</Text>
+                    <Text style={styles.suggestedFriendMutual}>{u.email}</Text>
+                  </View>
+                  <Button
+                    type="primary"
+                    label="ADD"
+                    size="sm"
+                    onPress={() => sendFriendRequest(u._id)}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+        </Card>
+
         <Card
           title="Suggested Friends"
           style={styles.suggestedFriendsCard}
@@ -333,7 +533,7 @@ const SocialScreen = () => {
                 type="primary"
                 label="ADD"
                 size="sm"
-                onPress={() => {}}
+                onPress={() => Alert.alert('Add Friend', 'Use search to add real users in a later step.')}
               />
             </View>
             
@@ -349,7 +549,7 @@ const SocialScreen = () => {
                 type="primary"
                 label="ADD"
                 size="sm"
-                onPress={() => {}}
+                onPress={() => Alert.alert('Add Friend', 'Use search to add real users in a later step.')}
               />
             </View>
             
@@ -365,7 +565,7 @@ const SocialScreen = () => {
                 type="primary"
                 label="ADD"
                 size="sm"
-                onPress={() => {}}
+                onPress={() => Alert.alert('Add Friend', 'Use search to add real users in a later step.')}
               />
             </View>
           </View>
@@ -388,7 +588,7 @@ const SocialScreen = () => {
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'feed' && styles.activeTab]}
-          onPress={() => setActiveTab('feed')}
+          onPress={() => { setActiveTab('feed'); loadFeed(); }}
         >
           <Text 
             style={[
@@ -402,7 +602,7 @@ const SocialScreen = () => {
         
         <TouchableOpacity
           style={[styles.tab, activeTab === 'challenges' && styles.activeTab]}
-          onPress={() => setActiveTab('challenges')}
+          onPress={() => { setActiveTab('challenges'); loadChallenges(); }}
         >
           <Text 
             style={[
@@ -416,7 +616,7 @@ const SocialScreen = () => {
         
         <TouchableOpacity
           style={[styles.tab, activeTab === 'friends' && styles.activeTab]}
-          onPress={() => setActiveTab('friends')}
+          onPress={() => { setActiveTab('friends'); loadFriends(); }}
         >
           <Text 
             style={[
@@ -743,6 +943,28 @@ const styles = StyleSheet.create({
   suggestedFriendsCard: {
     marginTop: SIZES.spacing.md,
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchLabel: {
+    color: COLORS.text.secondary,
+    fontSize: FONTS.size.sm,
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: SIZES.radius.round,
+    paddingVertical: SIZES.spacing.xs,
+    paddingHorizontal: SIZES.spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  searchButtonText: {
+    color: COLORS.text.primary,
+    fontSize: FONTS.size.sm,
+    marginLeft: SIZES.spacing.xs,
+  },
   suggestedFriendsContent: {
     paddingVertical: SIZES.spacing.md,
   },
@@ -777,6 +999,40 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 80,
+  },
+  // Disabled state styles
+  disabledContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+  },
+  disabledGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  disabledTitle: {
+    fontSize: 24,
+    fontFamily: FONTS.bold,
+    color: COLORS.text.primary,
+    textAlign: 'center',
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  disabledText: {
+    fontSize: 16,
+    fontFamily: FONTS.regular,
+    color: COLORS.text.secondary,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  disabledActions: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  disabledButton: {
+    minWidth: 160,
   },
 });
 

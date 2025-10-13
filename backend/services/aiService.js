@@ -27,121 +27,6 @@ class AIService {
         'Content-Type': 'application/json',
       }
     });
-
-    // Demo barcode database for testing
-    this.demoBarcodes = {
-      '3017620422003': {
-        name: 'Nutella Hazelnut Spread',
-        brand: 'Ferrero',
-        nutrition: { calories: 539, protein: 6.3, carbs: 57.5, fat: 30.9, fiber: 3.4, sugar: 56.8, sodium: 42 },
-        ingredients: ['sugar', 'palm oil', 'hazelnuts', 'cocoa', 'skimmed milk powder', 'whey powder', 'lecithin', 'vanillin'],
-        allergens: ['nuts', 'milk'],
-        nutritionGrade: 'E',
-        verified: true
-      },
-      '5000159407236': {
-        name: 'Snickers Chocolate Bar',
-        brand: 'Mars',
-        nutrition: { calories: 488, protein: 8.6, carbs: 60.5, fat: 24.0, fiber: 2.8, sugar: 52.5, sodium: 189 },
-        ingredients: ['milk chocolate', 'peanuts', 'caramel', 'nougat'],
-        allergens: ['nuts', 'milk', 'soy'],
-        nutritionGrade: 'E',
-        verified: true
-      },
-      '4008400322221': {
-        name: 'Greek Yogurt Natural',
-        brand: 'Fage',
-        nutrition: { calories: 59, protein: 10.0, carbs: 3.6, fat: 0.4, fiber: 0, sugar: 3.2, sodium: 36 },
-        ingredients: ['milk', 'live cultures'],
-        allergens: ['milk'],
-        nutritionGrade: 'A',
-        verified: true
-      },
-      '049000006343': {
-        name: 'Coca-Cola Classic',
-        brand: 'Coca-Cola',
-        nutrition: { calories: 140, protein: 0, carbs: 39, fat: 0, fiber: 0, sugar: 39, sodium: 45 },
-        ingredients: ['carbonated water', 'high fructose corn syrup', 'caramel color', 'phosphoric acid', 'natural flavors', 'caffeine'],
-        allergens: [],
-        nutritionGrade: 'E',
-        verified: true
-      },
-      '028400090000': {
-        name: 'Banana',
-        brand: 'Fresh Produce',
-        nutrition: { calories: 89, protein: 1.1, carbs: 23, fat: 0.3, fiber: 2.6, sugar: 12, sodium: 1 },
-        ingredients: ['banana'],
-        allergens: [],
-        nutritionGrade: 'A',
-        verified: true
-      }
-    };
-
-    // Demo food recognition database
-    this.demoFoods = [
-      {
-        name: 'Grilled Chicken Salad',
-        confidence: 0.89,
-        nutrition: { calories: 320, protein: 28, carbs: 15, fat: 18, fiber: 8, sugar: 5, sodium: 450 },
-        ingredients: ['chicken breast', 'mixed greens', 'olive oil', 'balsamic vinegar', 'cherry tomatoes', 'cucumber'],
-        allergens: [],
-        verified: false
-      },
-      {
-        name: 'Protein Smoothie Bowl',
-        confidence: 0.92,
-        nutrition: { calories: 280, protein: 22, carbs: 35, fat: 8, fiber: 6, sugar: 18, sodium: 120 },
-        ingredients: ['banana', 'protein powder', 'almond milk', 'berries', 'granola', 'chia seeds'],
-        allergens: ['nuts'],
-        verified: false
-      },
-      {
-        name: 'Salmon with Vegetables',
-        confidence: 0.85,
-        nutrition: { calories: 420, protein: 35, carbs: 12, fat: 25, fiber: 8, sugar: 4, sodium: 380 },
-        ingredients: ['salmon fillet', 'broccoli', 'carrots', 'olive oil', 'lemon', 'herbs'],
-        allergens: ['fish'],
-        verified: false
-      },
-      {
-        name: 'Greek Yogurt with Berries',
-        confidence: 0.94,
-        nutrition: { calories: 180, protein: 18, carbs: 22, fat: 2, fiber: 3, sugar: 16, sodium: 85 },
-        ingredients: ['greek yogurt', 'strawberries', 'blueberries', 'honey', 'almonds'],
-        allergens: ['milk', 'nuts'],
-        verified: false
-      },
-      {
-        name: 'Quinoa Bowl',
-        confidence: 0.87,
-        nutrition: { calories: 380, protein: 12, carbs: 65, fat: 8, fiber: 12, sugar: 6, sodium: 220 },
-        ingredients: ['quinoa', 'black beans', 'corn', 'avocado', 'lime', 'cilantro'],
-        allergens: [],
-        verified: false
-      }
-    ];
-  }
-
-  /**
-   * Return a single demo food item for GET /api/ai/demo/food
-   */
-  getDemoFood() {
-    try {
-      if (Array.isArray(this.demoFoods) && this.demoFoods.length > 0) {
-        const idx = Math.floor(Math.random() * this.demoFoods.length);
-        return this.demoFoods[idx];
-      }
-      return { name: 'Demo Food', nutrition: { calories: 0 }, confidence: 1 };
-    } catch (e) {
-      return { name: 'Demo Food', nutrition: { calories: 0 }, confidence: 1 };
-    }
-  }
-
-  /**
-   * Return a demo barcode product for GET /api/ai/demo/barcode
-   */
-  async getDemoBarcode() {
-    return this.simulateBarcodeLookup();
   }
 
   /**
@@ -158,22 +43,6 @@ class AIService {
 
       console.log(`Looking up barcode: ${barcode}`);
       
-      // Check demo barcodes first
-      if (this.demoBarcodes[barcode]) {
-        console.log('Found in demo database');
-        return {
-          ...this.demoBarcodes[barcode],
-          barcode: barcode,
-          source: 'Demo Database'
-        };
-      }
-
-      // Handle demo mode
-      if (barcode === 'demo123') {
-        console.log('Demo barcode detected');
-        return await this.simulateBarcodeLookup();
-      }
-
       // Try Open Food Facts first (free, comprehensive)
       try {
         const openFoodResult = await this.lookupOpenFoodFacts(barcode);
@@ -322,12 +191,6 @@ class AIService {
       }
 
       console.log('Processing food image with AI...');
-      
-      // Handle demo mode
-      if (imagePath === 'demo') {
-        console.log('Demo image detected');
-        return await this.simulateAIFoodRecognition(imagePath);
-      }
 
       // Try Calorie Mama first (most accurate for food recognition)
       try {
@@ -369,9 +232,8 @@ class AIService {
         console.log('Nutritionix image processing failed:', error.message);
       }
 
-      // Fallback to demo mode
-      console.log('All AI services failed, using demo mode');
-      return await this.simulateAIFoodRecognition(imagePath);
+      // All AI services failed - throw proper error
+      throw new Error('All AI services failed to process the image. Please check API keys and try again.');
       
     } catch (error) {
       console.error('Error processing food image:', error);
@@ -674,71 +536,6 @@ class AIService {
 
     // Default estimation
     return { calories: 150, protein: 5, carbs: 20, fat: 5, fiber: 2, sugar: 5, sodium: 100 };
-  }
-
-  /**
-   * Simulate AI food recognition (fallback)
-   * @param {string} imagePath - Path to the captured image
-   * @returns {Promise<Object>} Recognized food information
-   */
-  async simulateAIFoodRecognition(imagePath) {
-    try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Return random demo food
-      const randomFood = this.demoFoods[Math.floor(Math.random() * this.demoFoods.length)];
-      return {
-        ...randomFood,
-        photo: imagePath,
-        source: 'Demo AI Recognition'
-      };
-    } catch (error) {
-      console.error('Error in simulated AI recognition:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Simulate barcode lookup for demo mode
-   * @returns {Promise<Object>} Demo product data
-   */
-  async simulateBarcodeLookup() {
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const demoProducts = [
-        {
-          name: 'Organic Bananas',
-          brand: 'Fresh Market',
-          barcode: 'demo123',
-          nutrition: { calories: 89, protein: 1.1, carbs: 23, fat: 0.3, fiber: 2.6, sugar: 12, sodium: 1 },
-          ingredients: ['banana'],
-          allergens: [],
-          nutritionGrade: 'A',
-          servingSize: '100g',
-          verified: true,
-          source: 'Demo Database'
-        },
-        {
-          name: 'Almond Milk',
-          brand: 'Silk',
-          barcode: 'demo123',
-          nutrition: { calories: 30, protein: 1, carbs: 1, fat: 2.5, fiber: 0, sugar: 0, sodium: 150 },
-          ingredients: ['almond milk', 'vitamin e', 'calcium carbonate'],
-          allergens: ['nuts'],
-          nutritionGrade: 'A',
-          servingSize: '240ml',
-          verified: true,
-          source: 'Demo Database'
-        }
-      ];
-      
-      return demoProducts[Math.floor(Math.random() * demoProducts.length)];
-    } catch (error) {
-      console.error('Error in simulated barcode lookup:', error);
-      throw error;
-    }
   }
 
   /**

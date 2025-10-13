@@ -2,7 +2,81 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../constants/theme';
-import aiService from '../services/aiService';
+
+// Import AI service with static import and fallback
+import aiServiceModule from '../services/aiService';
+
+// Create a fallback service in case aiService is not available
+const fallbackService = {
+    calculateNutritionFacts: (foodItem, servingSize = 100) => {
+      try {
+        if (!foodItem || !foodItem.nutrition) {
+          return {
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+            fiber: 0,
+            sugar: 0,
+            sodium: 0,
+            servingSize: `${servingSize}g`
+          };
+        }
+
+        const multiplier = servingSize / 100;
+        const nutrition = foodItem.nutrition;
+        
+        return {
+          calories: Math.round((nutrition.calories || 0) * multiplier),
+          protein: Math.round((nutrition.protein || 0) * multiplier * 10) / 10,
+          carbs: Math.round((nutrition.carbs || 0) * multiplier * 10) / 10,
+          fat: Math.round((nutrition.fat || 0) * multiplier * 10) / 10,
+          fiber: Math.round((nutrition.fiber || 0) * multiplier * 10) / 10,
+          sugar: Math.round((nutrition.sugar || 0) * multiplier * 10) / 10,
+          sodium: Math.round((nutrition.sodium || 0) * multiplier),
+          servingSize: `${servingSize}g`
+        };
+      } catch (error) {
+        console.error('Error calculating nutrition facts:', error);
+        return {
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+          fiber: 0,
+          sugar: 0,
+          sodium: 0,
+          servingSize: `${servingSize}g`
+        };
+      }
+    },
+    getMacroPercentages: (nutrition) => {
+      try {
+        if (!nutrition || typeof nutrition !== 'object') {
+          return { protein: 0, carbs: 0, fat: 0 };
+        }
+
+        const totalCalories = nutrition.calories || 0;
+        if (totalCalories === 0) return { protein: 0, carbs: 0, fat: 0 };
+
+        const proteinCalories = (nutrition.protein || 0) * 4;
+        const carbCalories = (nutrition.carbs || 0) * 4;
+        const fatCalories = (nutrition.fat || 0) * 9;
+
+        return {
+          protein: Math.round((proteinCalories / totalCalories) * 100),
+          carbs: Math.round((carbCalories / totalCalories) * 100),
+          fat: Math.round((fatCalories / totalCalories) * 100)
+        };
+      } catch (error) {
+        console.error('Error calculating macro percentages:', error);
+        return { protein: 0, carbs: 0, fat: 0 };
+      }
+    }
+  };
+
+// Use the real service or fallback
+const aiService = aiServiceModule || fallbackService;
 
 const FoodResultModal = ({ 
   foodData, 

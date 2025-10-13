@@ -1,6 +1,7 @@
-import { configureStore } from '@reduxjs/toolkit';
+import { configureStore, combineReducers } from '@reduxjs/toolkit';
 import { persistStore, persistReducer } from 'redux-persist';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // Import slices
 import authSlice from './slices/authSlice';
@@ -11,33 +12,50 @@ import progressSlice from './slices/progressSlice';
 import socialSlice from './slices/socialSlice';
 import notificationSlice from './slices/notificationSlice';
 
-// Persist configuration
-const persistConfig = {
-  key: 'root',
-  storage: AsyncStorage,
-  whitelist: ['auth', 'user', 'workout', 'nutrition', 'progress'], // Only persist these slices
-  blacklist: ['notification'] // Don't persist notifications
+// Web-compatible storage
+const createWebStorage = () => {
+  if (typeof window === 'undefined') {
+    return {
+      getItem: () => Promise.resolve(null),
+      setItem: () => Promise.resolve(),
+      removeItem: () => Promise.resolve(),
+    };
+  }
+  return {
+    getItem: (key) => Promise.resolve(localStorage.getItem(key)),
+    setItem: (key, value) => Promise.resolve(localStorage.setItem(key, value)),
+    removeItem: (key) => Promise.resolve(localStorage.removeItem(key)),
+  };
 };
 
-// Create persisted reducers
-const persistedAuthReducer = persistReducer(persistConfig, authSlice);
-const persistedUserReducer = persistReducer(persistConfig, userSlice);
-const persistedWorkoutReducer = persistReducer(persistConfig, workoutSlice);
-const persistedNutritionReducer = persistReducer(persistConfig, nutritionSlice);
-const persistedProgressReducer = persistReducer(persistConfig, progressSlice);
-const persistedSocialReducer = persistReducer(persistConfig, socialSlice);
+// Use web storage for web platform, AsyncStorage for native
+const storage = Platform.OS === 'web' ? createWebStorage() : AsyncStorage;
+
+// Combine all reducers
+const rootReducer = combineReducers({
+  auth: authSlice,
+  user: userSlice,
+  workout: workoutSlice,
+  nutrition: nutritionSlice,
+  progress: progressSlice,
+  social: socialSlice,
+  notification: notificationSlice
+});
+
+// Persist configuration - persist the root reducer once
+const persistConfig = {
+  key: 'root',
+  storage,
+  whitelist: ['auth', 'user', 'workout', 'nutrition', 'progress'], // Only persist these slices
+  blacklist: ['notification', 'social'] // Don't persist notifications and social (real-time data)
+};
+
+// Create persisted root reducer
+const persistedReducer = persistReducer(persistConfig, rootReducer);
 
 // Configure store
 export const store = configureStore({
-  reducer: {
-    auth: persistedAuthReducer,
-    user: persistedUserReducer,
-    workout: persistedWorkoutReducer,
-    nutrition: persistedNutritionReducer,
-    progress: persistedProgressReducer,
-    social: persistedSocialReducer,
-    notification: notificationSlice
-  },
+  reducer: persistedReducer,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
@@ -50,6 +68,6 @@ export const store = configureStore({
 // Create persistor
 export const persistor = persistStore(store);
 
-// Export types
-export type RootState = ReturnType<typeof store.getState>;
-export type AppDispatch = typeof store.dispatch;
+// Export types (TypeScript - use in .ts files, not .js)
+// export type RootState = ReturnType<typeof store.getState>;
+// export type AppDispatch = typeof store.dispatch;

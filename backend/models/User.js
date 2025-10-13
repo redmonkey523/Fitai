@@ -6,7 +6,6 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
     trim: true
   },
@@ -18,7 +17,6 @@ const userSchema = new mongoose.Schema({
   username: {
     type: String,
     required: true,
-    unique: true,
     trim: true,
     minlength: 3,
     maxlength: 30
@@ -51,11 +49,11 @@ const userSchema = new mongoose.Schema({
   
   // Physical Information
   height: {
-    value: { type: Number, required: true },
+    value: { type: Number, required: false },
     unit: { type: String, enum: ['cm', 'ft'], default: 'cm' }
   },
   weight: {
-    value: { type: Number, required: true },
+    value: { type: Number, required: false },
     unit: { type: String, enum: ['kg', 'lbs'], default: 'kg' }
   },
   bodyFatPercentage: {
@@ -78,6 +76,64 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extremely_active'],
     default: 'moderately_active'
+  },
+
+  // Goal Quiz Data - Single source of truth
+  goalQuiz: {
+    primary: {
+      type: String,
+      enum: ['lose', 'recomp', 'gain'],
+      default: null
+    },
+    pace_kg_per_week: {
+      type: Number,
+      default: 0
+    },
+    diet_style: {
+      type: String,
+      enum: ['balanced', 'high_protein', 'low_carb', 'plant'],
+      default: 'balanced'
+    }
+  },
+
+  // Computed Targets - Derived from profile + goals
+  targets: {
+    calories: {
+      type: Number,
+      default: 2000
+    },
+    protein_g: {
+      type: Number,
+      default: 150
+    },
+    carbs_g: {
+      type: Number,
+      default: 200
+    },
+    fat_g: {
+      type: Number,
+      default: 65
+    },
+    fiber_g: {
+      type: Number,
+      default: 30
+    },
+    water_cups: {
+      type: Number,
+      default: 10
+    },
+    bmr: {
+      type: Number,
+      default: 1600
+    },
+    tdee: {
+      type: Number,
+      default: 2000
+    },
+    formula: {
+      type: String,
+      default: 'mifflin_st_jeor'
+    }
   },
   
   // Preferences
@@ -195,6 +251,8 @@ const userSchema = new mongoose.Schema({
     default: false
   },
   premiumExpiresAt: Date
+  ,
+  trialEndsAt: { type: Date }
 }, {
   timestamps: true
 });

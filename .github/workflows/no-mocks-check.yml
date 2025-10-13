@@ -1,0 +1,96 @@
+name: No Mocks in Production Code
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  check-no-mocks:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check for mock imports in production code
+      run: |
+        echo "🔍 Checking for mock libraries in production code..."
+        
+        # Define mock patterns to search for
+        MOCK_PATTERNS=(
+          "msw"
+          "miragejs"
+          "json-server"
+          "axios-mock-adapter"
+          "nock"
+          "fetch-mock"
+          "jest.mock"
+          "mockImplementation"
+          "mockReturnValue"
+        )
+        
+        # Directories to check (exclude test directories)
+        PRODUCTION_DIRS=(
+          "src/components"
+          "src/screens"
+          "src/services"
+          "src/store"
+          "src/contexts"
+          "src/navigation"
+          "src/utils"
+          "backend/routes"
+          "backend/models"
+          "backend/services"
+          "backend/middleware"
+        )
+        
+        MOCK_FOUND=false
+        
+        for pattern in "${MOCK_PATTERNS[@]}"; do
+          for dir in "${PRODUCTION_DIRS[@]}"; do
+            if [ -d "$dir" ]; then
+              echo "Checking $dir for pattern: $pattern"
+              if grep -r "$pattern" "$dir" --exclude-dir=node_modules --exclude-dir=__mocks__ --exclude="*.test.js" --exclude="*.spec.js"; then
+                echo "❌ ERROR: Found mock pattern '$pattern' in production code directory '$dir'"
+                MOCK_FOUND=true
+              fi
+            fi
+          done
+        done
+        
+        if [ "$MOCK_FOUND" = true ]; then
+          echo ""
+          echo "❌ FAILURE: Mock libraries found in production code!"
+          echo "🔧 Please remove mock imports from production code."
+          echo "📝 Mocks should only be used in test files (*.test.js, *.spec.js, __mocks__ directories)"
+          exit 1
+        else
+          echo "✅ SUCCESS: No mock libraries found in production code!"
+        fi
+    
+    - name: Check for hardcoded localhost URLs
+      run: |
+        echo "🔍 Checking for hardcoded localhost URLs..."
+        
+        # Look for hardcoded localhost URLs (excluding config files)
+        if grep -r "http://localhost" src/ --exclude="api.js" --exclude-dir=__mocks__ --exclude="*.test.js" --exclude="*.spec.js"; then
+          echo "❌ ERROR: Found hardcoded localhost URLs in production code!"
+          echo "🔧 Please use environment-driven configuration instead."
+          exit 1
+        else
+          echo "✅ SUCCESS: No hardcoded localhost URLs found!"
+        fi
+    
+    - name: Check for hardcoded API URLs
+      run: |
+        echo "🔍 Checking for hardcoded API URLs..."
+        
+        # Look for hardcoded IP addresses or domains (excluding config files)
+        if grep -r -E "http://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" src/ --exclude="api.js" --exclude-dir=__mocks__ --exclude="*.test.js" --exclude="*.spec.js"; then
+          echo "❌ ERROR: Found hardcoded IP addresses in production code!"
+          echo "🔧 Please use environment-driven configuration instead."
+          exit 1
+        else
+          echo "✅ SUCCESS: No hardcoded IP addresses found!"
+        fi

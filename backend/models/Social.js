@@ -47,7 +47,7 @@ const postSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['workout', 'nutrition', 'progress', 'achievement', 'general'],
+    enum: ['workout', 'nutrition', 'progress', 'achievement', 'general', 'post', 'story'],
     default: 'general'
   },
   title: {
@@ -57,9 +57,16 @@ const postSchema = new mongoose.Schema({
   },
   content: {
     type: String,
-    required: true,
     trim: true,
-    maxlength: 2000
+    maxlength: 2000,
+    validate: {
+      validator: function(value) {
+        const hasContent = Boolean(value && String(value).trim().length > 0);
+        const hasMedia = Array.isArray(this.media) && this.media.length > 0;
+        return hasContent || hasMedia;
+      },
+      message: 'Content or media is required'
+    }
   },
   media: [{
     type: {

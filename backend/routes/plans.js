@@ -44,6 +44,18 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Patch a plan (add media, update sessions)
+router.patch('/:id', authenticateToken, async (req, res) => {
+  try {
+    const update = req.body;
+    const plan = await Plan.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+    if (!plan) return res.status(404).json({ success: false, message: 'Plan not found' });
+    res.json({ success: true, data: plan });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 // Assign plan to user
 router.post('/:id/assign', authenticateToken, async (req, res) => {
   try {
@@ -63,12 +75,15 @@ router.post('/:id/assign', authenticateToken, async (req, res) => {
 // Get user's calendar (current assignment)
 router.get('/me/calendar', authenticateToken, async (req, res) => {
   try {
-    const assignment = await PlanAssignment.findOne({ userId: req.user._id });
+    // Avoid ObjectId casting issues if req.user._id is a number (in-memory mode)
+    const userId = req.user._id;
+    const assignment = await PlanAssignment.findOne({ userId });
     if (!assignment) return res.json({ success: true, data: { weeks: [] } });
     const plan = await Plan.findById(assignment.planId);
     if (!plan) return res.json({ success: true, data: { weeks: [] } });
     res.json({ success: true, data: { planId: plan._id, name: plan.name, phases: plan.phases, assignment } });
   } catch (error) {
+    console.error('Plans calendar error:', error);
     res.status(500).json({ success: false, message: 'Error fetching calendar', error: error.message });
   }
 });

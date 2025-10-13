@@ -15,9 +15,13 @@ const AuthScreen = ({ onAuthSuccess }) => {
   const [authMode, setAuthMode] = useState('welcome'); // 'welcome', 'email', 'login'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [firstNameError, setFirstNameError] = useState('');
+  const [lastNameError, setLastNameError] = useState('');
 
   // Get auth methods from context
   const { 
@@ -32,15 +36,17 @@ const AuthScreen = ({ onAuthSuccess }) => {
     // Clear previous errors
     setEmailError('');
     setPasswordError('');
+    setFirstNameError('');
+    setLastNameError('');
 
     // Basic validation
-    if (!email || !password) {
+    if (!email || !password || !firstName || !lastName) {
       Alert.alert('Error', 'Please fill in all fields.');
       return;
     }
 
     try {
-      await handleEmailSignUpPress(email, password);
+      await handleEmailSignUpPress(email, password, firstName, lastName);
       // The auth context will handle the success and show toast
     } catch (error) {
       // Error handling is done in the auth context
@@ -100,16 +106,10 @@ const AuthScreen = ({ onAuthSuccess }) => {
         {/* Primary CTA */}
         <Button
           type="primary"
-          label="Continue with Google (Coming Soon)"
-          onPress={() => {
-            Alert.alert(
-              'Google Sign-In',
-              'Google Sign-In is temporarily disabled for mobile compatibility. Please use email registration instead.',
-              [{ text: 'OK' }]
-            );
-          }}
-          disabled={true}
-          style={[styles.primaryButton, { opacity: 0.6 }]}
+          label={isAuthenticating ? "Signing in..." : "Continue with Google"}
+          onPress={handleGoogleSignInPress}
+          disabled={isAuthenticating}
+          style={styles.primaryButton}
           icon={<Ionicons name="logo-google" size={20} color={COLORS.text.primary} />}
         />
 
@@ -163,6 +163,42 @@ const AuthScreen = ({ onAuthSuccess }) => {
         <Text style={styles.emailSubtitle}>
           Enter your details to get started
         </Text>
+
+        {/* First Name */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>First name</Text>
+          <TextInput
+            style={[styles.textInput, firstNameError && styles.inputError]}
+            placeholder="Enter your first name"
+            placeholderTextColor={COLORS.text.tertiary}
+            value={firstName}
+            onChangeText={(text) => {
+              setFirstName(text);
+              setFirstNameError('');
+            }}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
+          {firstNameError ? <Text style={styles.errorText}>{firstNameError}</Text> : null}
+        </View>
+
+        {/* Last Name */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Last name</Text>
+          <TextInput
+            style={[styles.textInput, lastNameError && styles.inputError]}
+            placeholder="Enter your last name"
+            placeholderTextColor={COLORS.text.tertiary}
+            value={lastName}
+            onChangeText={(text) => {
+              setLastName(text);
+              setLastNameError('');
+            }}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
+          {lastNameError ? <Text style={styles.errorText}>{lastNameError}</Text> : null}
+        </View>
 
         {/* Email Input */}
         <View style={styles.inputContainer}>

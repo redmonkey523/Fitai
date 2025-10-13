@@ -1,5 +1,5 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
+import React, { useRef } from 'react';
+import { TouchableOpacity, Text, StyleSheet, View, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../constants/theme';
 
@@ -24,7 +24,26 @@ const Button = ({
   style,
   icon,
   textColor,
+  accessibilityLabel,
+  accessibilityHint,
 }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  };
   // Determine gradient colors based on button type
   const getGradient = () => {
     switch (type) {
@@ -41,17 +60,17 @@ const Button = ({
     }
   };
 
-  // Determine button height based on size
+  // Determine button height based on size (min 44pt for accessibility)
   const getHeight = () => {
     switch (size) {
       case 'sm':
-        return SIZES.button.height.sm;
+        return Math.max(SIZES.button.height.sm || 36, 32); // Allow smaller for secondary actions
       case 'md':
-        return SIZES.button.height.md;
+        return Math.max(SIZES.button.height.md || 48, 44); // Min 44pt touch target
       case 'lg':
-        return SIZES.button.height.lg;
+        return Math.max(SIZES.button.height.lg || 56, 44); // Min 44pt touch target
       default:
-        return SIZES.button.height.md;
+        return 44; // Default min 44pt
     }
   };
 
@@ -147,14 +166,23 @@ const Button = ({
   };
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.container, SHADOWS.medium]}
-    >
-      {renderButton()}
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        disabled={disabled}
+        style={[styles.container, SHADOWS.medium]}
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel || label}
+        accessibilityHint={accessibilityHint}
+        accessibilityState={{ disabled }}
+      >
+        {renderButton()}
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 

@@ -33,11 +33,6 @@ const exerciseSchema = new mongoose.Schema({
 });
 
 const setSchema = new mongoose.Schema({
-  exercise: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Exercise',
-    required: true
-  },
   reps: {
     type: Number,
     min: 0
@@ -308,3 +303,4 @@ workoutSchema.methods.updateSetCompletion = function(exerciseIndex, setIndex, co
 };
 
 module.exports = mongoose.model('Workout', workoutSchema);
+v

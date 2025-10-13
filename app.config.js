@@ -10,10 +10,12 @@ module.exports = () => {
       name: 'fitness-app-new',
       slug: 'fitness-app-new',
       version: '1.0.0',
+      sdkVersion: '54.0.0',
       orientation: 'portrait',
       icon: './assets/icon.png',
       userInterfaceStyle: 'light',
       newArchEnabled: true,
+      platforms: ['ios', 'android'],
       splash: {
         image: './assets/splash-icon.png',
         resizeMode: 'contain',
@@ -21,6 +23,7 @@ module.exports = () => {
       },
       ios: {
         supportsTablet: true,
+        bundleIdentifier: 'com.anonymous.fitnessappnew',
         infoPlist: {
           NSCameraUsageDescription:
             'This app uses the camera to scan food items and barcodes for nutrition tracking.',
@@ -41,24 +44,13 @@ module.exports = () => {
           'android.permission.READ_EXTERNAL_STORAGE',
         ],
       },
-      web: {
-        favicon: './assets/favicon.png',
-      },
       extra: {
         apiUrl,
         environment,
+        eas: {
+          projectId: 'e152d570-3ac0-462a-bebe-0088a390df03',
+        },
       },
-      plugins: [
-        [
-          'react-native-vision-camera',
-          {
-            cameraPermissionText:
-              'This app needs access to your camera to scan food items and barcodes.',
-            microphonePermissionText:
-              'This app needs access to your microphone for voice-guided workouts.',
-          },
-        ],
-      ],
     },
   };
 };

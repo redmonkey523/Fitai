@@ -13,8 +13,39 @@ class AIService {
   constructor() {
     this.openFoodFactsClient = axios.create({
       baseURL: OPEN_FOOD_FACTS_API,
-      timeout: 10000,
+      timeout: 15000,
     });
+    
+    // Demo barcode database for testing
+    this.demoBarcodes = {
+      '3017620422003': {
+        name: 'Nutella Hazelnut Spread',
+        brand: 'Ferrero',
+        nutrition: { calories: 539, protein: 6.3, carbs: 57.5, fat: 30.9, fiber: 3.4, sugar: 56.8, sodium: 42 },
+        ingredients: ['sugar', 'palm oil', 'hazelnuts', 'cocoa', 'skimmed milk powder', 'whey powder', 'lecithin', 'vanillin'],
+        allergens: ['nuts', 'milk'],
+        nutritionGrade: 'E',
+        verified: true
+      },
+      '5000159407236': {
+        name: 'Snickers Chocolate Bar',
+        brand: 'Mars',
+        nutrition: { calories: 488, protein: 8.6, carbs: 60.5, fat: 24.0, fiber: 2.8, sugar: 52.5, sodium: 189 },
+        ingredients: ['milk chocolate', 'peanuts', 'caramel', 'nougat'],
+        allergens: ['nuts', 'milk', 'soy'],
+        nutritionGrade: 'E',
+        verified: true
+      },
+      '4008400322221': {
+        name: 'Greek Yogurt Natural',
+        brand: 'Fage',
+        nutrition: { calories: 59, protein: 10.0, carbs: 3.6, fat: 0.4, fiber: 0, sugar: 3.2, sodium: 36 },
+        ingredients: ['milk', 'live cultures'],
+        allergens: ['milk'],
+        nutritionGrade: 'A',
+        verified: true
+      }
+    };
   }
 
   /**
@@ -30,6 +61,22 @@ class AIService {
       }
 
       console.log(`Looking up barcode: ${barcode}`);
+      
+      // Check demo barcodes first
+      if (this.demoBarcodes[barcode]) {
+        console.log('Found in demo database');
+        return {
+          ...this.demoBarcodes[barcode],
+          barcode: barcode,
+          source: 'Demo Database'
+        };
+      }
+
+      // Handle demo mode
+      if (barcode === 'demo123') {
+        console.log('Demo barcode detected');
+        return await this.simulateBarcodeLookup();
+      }
       
       const response = await this.openFoodFactsClient.get(`/${barcode}.json`);
       const data = response.data;
@@ -102,6 +149,12 @@ class AIService {
       }
 
       console.log('Processing food image with AI...');
+      
+      // Handle demo mode
+      if (imagePath === 'demo') {
+        console.log('Demo image detected');
+        return await this.simulateAIFoodRecognition(imagePath);
+      }
       
       // For now, we'll use a simulated AI response
       // In production, you would integrate with:
@@ -237,12 +290,90 @@ class AIService {
           photo: imagePath,
           verified: false,
           source: 'AI Recognition'
+        },
+        {
+          name: 'Avocado Toast',
+          confidence: 0.91,
+          nutrition: { 
+            calories: 220, 
+            protein: 8, 
+            carbs: 25, 
+            fat: 12,
+            fiber: 6,
+            sugar: 2,
+            sodium: 320
+          },
+          ingredients: ['whole grain bread', 'avocado', 'eggs', 'salt', 'pepper', 'red pepper flakes'],
+          allergens: ['eggs', 'gluten'],
+          photo: imagePath,
+          verified: false,
+          source: 'AI Recognition'
+        },
+        {
+          name: 'Chicken Stir Fry',
+          confidence: 0.83,
+          nutrition: { 
+            calories: 350, 
+            protein: 25, 
+            carbs: 20, 
+            fat: 18,
+            fiber: 5,
+            sugar: 8,
+            sodium: 680
+          },
+          ingredients: ['chicken breast', 'broccoli', 'bell peppers', 'soy sauce', 'ginger', 'garlic', 'sesame oil'],
+          allergens: ['soy'],
+          photo: imagePath,
+          verified: false,
+          source: 'AI Recognition'
         }
       ];
       
       return foodOptions[Math.floor(Math.random() * foodOptions.length)];
     } catch (error) {
       console.error('Error in simulated AI recognition:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Simulate barcode lookup for demo mode
+   * @returns {Promise<Object>} Demo product data
+   */
+  async simulateBarcodeLookup() {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const demoProducts = [
+        {
+          name: 'Organic Bananas',
+          brand: 'Fresh Market',
+          barcode: 'demo123',
+          nutrition: { calories: 89, protein: 1.1, carbs: 23, fat: 0.3, fiber: 2.6, sugar: 12, sodium: 1 },
+          ingredients: ['banana'],
+          allergens: [],
+          nutritionGrade: 'A',
+          servingSize: '100g',
+          verified: true,
+          source: 'Demo Database'
+        },
+        {
+          name: 'Almond Milk',
+          brand: 'Silk',
+          barcode: 'demo123',
+          nutrition: { calories: 30, protein: 1, carbs: 1, fat: 2.5, fiber: 0, sugar: 0, sodium: 150 },
+          ingredients: ['almond milk', 'vitamin e', 'calcium carbonate'],
+          allergens: ['nuts'],
+          nutritionGrade: 'A',
+          servingSize: '240ml',
+          verified: true,
+          source: 'Demo Database'
+        }
+      ];
+      
+      return demoProducts[Math.floor(Math.random() * demoProducts.length)];
+    } catch (error) {
+      console.error('Error in simulated barcode lookup:', error);
       throw error;
     }
   }
@@ -370,4 +501,9 @@ class AIService {
   }
 }
 
-export default new AIService();
+// Create and export a single instance
+const aiService = new AIService();
+
+// Export both the class and the instance
+export { AIService };
+export default aiService;

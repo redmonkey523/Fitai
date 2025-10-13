@@ -37,3 +37,4 @@ Write-Host "  git checkout develop" -ForegroundColor White
 Write-Host "  git merge feature/backend-setup" -ForegroundColor White
 
 Read-Host "`nPress Enter to continue"
+

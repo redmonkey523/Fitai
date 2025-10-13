@@ -1,0 +1,485 @@
+openapi: 3.0.3
+info:
+  title: Fitness App Goal Quiz & Progress API
+  description: API for Goal Quiz as single source of truth, with target computation and progress aggregation
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:5000/api
+    description: Local development server
+  - url: https://api.fitnessapp.com/api
+    description: Production server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    UserProfile:
+      type: object
+      required:
+        - id
+        - sex
+        - age
+        - height_cm
+        - weight_kg
+        - units
+      properties:
+        id:
+          type: string
+          description: User ID
+        sex:
+          type: string
+          enum: [male, female, custom]
+          description: Biological sex for BMR calculation
+        age:
+          type: integer
+          minimum: 13
+          maximum: 120
+          description: Age in years
+        height_cm:
+          type: number
+          minimum: 100
+          maximum: 250
+          description: Height in centimeters
+        weight_kg:
+          type: number
+          minimum: 30
+          maximum: 300
+          description: Weight in kilograms
+        body_fat_pct:
+          type: number
+          minimum: 3
+          maximum: 60
+          description: Body fat percentage (optional)
+        units:
+          type: string
+          enum: [metric, imperial]
+          description: Preferred unit system
+
+    Goals:
+      type: object
+      required:
+        - primary
+        - pace_kg_per_week
+        - diet_style
+      properties:
+        primary:
+          type: string
+          enum: [lose, recomp, gain]
+          description: Primary fitness goal
+        pace_kg_per_week:
+          type: number
+          description: Target weight change per week in kg (negative for loss, positive for gain)
+        diet_style:
+          type: string
+          enum: [balanced, high_protein, low_carb, plant]
+          description: Preferred diet macro split
+
+    Targets:
+      type: object
+      properties:
+        calories:
+          type: integer
+          description: Target daily calories
+        protein_g:
+          type: integer
+          description: Target daily protein in grams
+        carbs_g:
+          type: integer
+          description: Target daily carbohydrates in grams
+        fat_g:
+          type: integer
+          description: Target daily fat in grams
+        fiber_g:
+          type: integer
+          description: Target daily fiber in grams
+        water_cups:
+          type: integer
+          description: Target daily water intake in cups
+        bmr:
+          type: integer
+          description: Basal Metabolic Rate in calories
+        tdee:
+          type: integer
+          description: Total Daily Energy Expenditure in calories
+        formula:
+          type: string
+          enum: [mifflin_st_jeor]
+          description: Formula used for BMR calculation
+
+    GoalsResponse:
+      type: object
+      properties:
+        goals:
+          $ref: '#/components/schemas/Goals'
+        targets:
+          $ref: '#/components/schemas/Targets'
+
+    Summary:
+      type: object
+      properties:
+        weightTrend:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              kg:
+                type: number
+        workoutsByDay:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: string
+                format: date
+              count:
+                type: integer
+        streakDays:
+          type: integer
+          description: Current consecutive workout streak
+        nutritionCompliance:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              kcal:
+                type: integer
+                description: Actual calories consumed
+              target_kcal:
+                type: integer
+                description: Target calories
+              p:
+                type: integer
+                description: Protein consumed in grams
+              c:
+                type: integer
+                description: Carbs consumed in grams
+              f:
+                type: integer
+                description: Fat consumed in grams
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+          description: Daily step counts
+        hydrationCups:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              cups:
+                type: integer
+          description: Daily water intake in cups
+        targets:
+          $ref: '#/components/schemas/Targets'
+
+    ApiError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum: 
+                - BAD_REQUEST
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - NOT_FOUND
+                - TOO_MANY_REQUESTS
+                - INTERNAL_ERROR
+                - SERVICE_UNAVAILABLE
+            message:
+              type: string
+
+security:
+  - BearerAuth: []
+
+paths:
+  /users/me/profile:
+    patch:
+      summary: Update user profile (partial)
+      description: Update user profile fields. Stores values in SI units (cm/kg) in database.
+      operationId: updateUserProfile
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                height:
+                  type: object
+                  properties:
+                    value:
+                      type: number
+                    unit:
+                      type: string
+                      enum: [cm, ft]
+                weight:
+                  type: object
+                  properties:
+                    value:
+                      type: number
+                    unit:
+                      type: string
+                      enum: [kg, lbs]
+                bodyFatPercentage:
+                  type: number
+                  minimum: 3
+                  maximum: 60
+                dateOfBirth:
+                  type: string
+                  format: date
+                gender:
+                  type: string
+                  enum: [male, female, other, prefer_not_to_say]
+                activityLevel:
+                  type: string
+                  enum: [sedentary, lightly_active, moderately_active, very_active, extremely_active]
+            examples:
+              updateWeight:
+                value:
+                  weight:
+                    value: 75
+                    unit: kg
+              updateMultiple:
+                value:
+                  weight:
+                    value: 165
+                    unit: lbs
+                  height:
+                    value: 5.8
+                    unit: ft
+                  bodyFatPercentage: 18
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Bad request - invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Too many requests
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /users/me/goals:
+    put:
+      summary: Update goals and compute targets
+      description: |
+        Update user goals and automatically compute nutritional targets using Mifflin-St Jeor formula.
+        This is the single source of truth for goals. Targets are computed server-side and persisted.
+      operationId: updateGoals
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Goals'
+            examples:
+              weightLoss:
+                value:
+                  primary: lose
+                  pace_kg_per_week: -0.5
+                  diet_style: high_protein
+              muscleGain:
+                value:
+                  primary: gain
+                  pace_kg_per_week: 0.25
+                  diet_style: balanced
+              recomp:
+                value:
+                  primary: recomp
+                  pace_kg_per_week: 0
+                  diet_style: high_protein
+      responses:
+        '200':
+          description: Goals updated and targets computed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalsResponse'
+              example:
+                goals:
+                  primary: lose
+                  pace_kg_per_week: -0.5
+                  diet_style: high_protein
+                targets:
+                  calories: 1850
+                  protein_g: 165
+                  carbs_g: 185
+                  fat_g: 62
+                  fiber_g: 30
+                  water_cups: 10
+                  bmr: 1680
+                  tdee: 2420
+                  formula: mifflin_st_jeor
+        '400':
+          description: Bad request - invalid goal parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /users/me/summary:
+    get:
+      summary: Get user progress summary
+      description: |
+        Get aggregated summary data for Home/Progress screens including weight trend,
+        workouts, nutrition compliance, steps, and hydration over a time window.
+      operationId: getUserSummary
+      tags:
+        - Users
+      parameters:
+        - name: window
+          in: query
+          description: Time window for data aggregation
+          required: false
+          schema:
+            type: string
+            enum: [7d, 30d]
+            default: 7d
+      responses:
+        '200':
+          description: Summary data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Summary'
+              example:
+                weightTrend:
+                  - date: "2025-01-01"
+                    kg: 75.2
+                  - date: "2025-01-02"
+                    kg: 75.0
+                workoutsByDay:
+                  - day: "2025-01-01"
+                    count: 1
+                  - day: "2025-01-03"
+                    count: 2
+                streakDays: 5
+                nutritionCompliance:
+                  - date: "2025-01-01"
+                    kcal: 1875
+                    target_kcal: 1850
+                    p: 168
+                    c: 180
+                    f: 58
+                steps: []
+                hydrationCups:
+                  - date: "2025-01-01"
+                    cups: 8
+                targets:
+                  calories: 1850
+                  protein_g: 165
+                  carbs_g: 185
+                  fat_g: 62
+                  fiber_g: 30
+                  water_cups: 10
+                  bmr: 1680
+                  tdee: 2420
+                  formula: mifflin_st_jeor
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+tags:
+  - name: Users
+    description: User profile, goals, and progress endpoints
+

@@ -1,0 +1,42 @@
+{
+  "root": true,
+  "env": { "es6": true, "browser": true, "node": true, "jest": true },
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": { "ecmaVersion": 2021, "sourceType": "module", "ecmaFeatures": { "jsx": true } },
+  "plugins": ["react", "react-native"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:react/recommended",
+    "plugin:react-native/all"
+  ],
+  "settings": { "react": { "version": "detect" } },
+  "rules": {
+    "react/prop-types": "off",
+    "react-native/no-inline-styles": "warn",
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "JSXAttribute[name.name='pointerEvents']",
+        "message": "Use style={{ pointerEvents }} instead of the pointerEvents prop (RN Web)."
+      },
+      {
+        "selector": "Property[key.name='resizeMode']",
+        "message": "Pass resizeMode as an Image prop, not inside styles (RN Web)."
+      },
+      {
+        "selector": "Property[key.name=/^shadow(A|O|R|C|Offset)/]",
+        "message": "Avoid native shadow* in styles for web; use theme SHADOWS with boxShadow."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/constants/theme.js"],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
+}
+
+

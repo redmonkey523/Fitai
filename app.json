@@ -14,9 +14,11 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.fitnessapp.new",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to scan food items and barcodes for nutrition tracking.",
-        "NSMicrophoneUsageDescription": "This app uses the microphone for voice-guided workouts."
+        "NSHealthShareUsageDescription": "We need access to your step count to track your daily activity and help you reach your fitness goals.",
+        "NSHealthUpdateUsageDescription": "We do not write any data to your Health app.",
+        "UIBackgroundModes": ["fetch"]
       }
     },
     "android": {
@@ -24,29 +26,22 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.fitnessappnew",
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.READ_EXTERNAL_STORAGE"
-      ]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "apiUrl": "${EXPO_PUBLIC_API_URL}",
-      "environment": "development"
+      "package": "com.anonymous.fitnessappnew"
     },
     "plugins": [
       [
-        "react-native-vision-camera",
+        "expo-notifications",
         {
-          "cameraPermissionText": "This app needs access to your camera to scan food items and barcodes.",
-          "microphonePermissionText": "This app needs access to your microphone for voice-guided workouts."
+          "icon": "./assets/icon.png",
+          "color": "#0EA5FF",
+          "sounds": []
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    }
   }
 }

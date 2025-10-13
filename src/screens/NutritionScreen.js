@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../constants/theme';
+import { useAuth } from '../contexts/AuthContext';
 import CameraScanner from '../components/CameraScanner';
 import FoodResultModal from '../components/FoodResultModal';
 
-const NutritionScreen = () => {
+const NutritionScreen = ({ navigation }) => {
+  const { entitlements, user } = useAuth();
+  const nowMs = Date.now();
+  const trialEndsMs = user?.trialEndsAt ? new Date(user.trialEndsAt).getTime() : null;
+  const trialActive = trialEndsMs ? nowMs < trialEndsMs : true;
+  const isAdmin = user?.email === 'chickenman10010@gmail.com';
+  const isPro = Boolean(entitlements?.pro) || isAdmin || trialActive;
   const [activeTab, setActiveTab] = useState('meals');
   const [showCamera, setShowCamera] = useState(false);
   const [cameraMode, setCameraMode] = useState('food');
@@ -127,14 +134,36 @@ const NutritionScreen = () => {
     <View style={styles.mealsContainer}>
       {/* Quick Actions */}
       <View style={styles.quickActions}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleCameraFoodRecognition}>
+        <TouchableOpacity
+          style={[styles.actionButton, !isPro && styles.lockedButton]}
+          onPress={() => { if (isPro) handleCameraFoodRecognition(); else Alert.alert('Pro Required', 'Unlock Pro to use AI food recognition.'); }}
+        >
           <Ionicons name="camera" size={24} color={COLORS.text.primary} />
           <Text style={styles.actionText}>Scan Food</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton} onPress={handleBarcodeScan}>
+        <TouchableOpacity
+          style={[styles.actionButton, !isPro && styles.lockedButton]}
+          onPress={() => { if (isPro) handleBarcodeScan(); else Alert.alert('Pro Required', 'Unlock Pro to use barcode scanning.'); }}
+        >
           <Ionicons name="barcode" size={24} color={COLORS.text.primary} />
           <Text style={styles.actionText}>Scan Barcode</Text>
         </TouchableOpacity>
+        {!isPro && (
+        <TouchableOpacity
+          style={[styles.actionButton, { backgroundColor: COLORS.accent.primary }]}
+          onPress={async () => {
+            try {
+              const res = await (await import('../services/api')).default.purchasePro();
+              if (res?.success) Alert.alert('Pro Unlocked', 'Macro tracker and pro features are now enabled.');
+            } catch (e) {
+              Alert.alert('Purchase Failed', e?.message || 'Try again later');
+            }
+          }}
+        >
+          <Ionicons name="lock-open" size={24} color={COLORS.background.primary} />
+          <Text style={[styles.actionText, { color: COLORS.background.primary }]}>Unlock Pro</Text>
+        </TouchableOpacity>
+        )}
       </View>
 
       {/* Meals */}
@@ -269,7 +298,15 @@ const NutritionScreen = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Nutrition</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.headerTitle}>Nutrition</Text>
+          <TouchableOpacity 
+            style={styles.mealPlanButton}
+            onPress={() => navigation.navigate('MealPlanning')}
+          >
+            <Ionicons name="calendar-outline" size={24} color={COLORS.accent.primary} />
+          </TouchableOpacity>
+        </View>
         <View style={styles.headerStats}>
           <Text style={styles.headerCalories}>{Math.round(dailyNutrition.calories)} kcal</Text>
           <Text style={styles.headerMacros}>
@@ -339,11 +376,19 @@ const styles = StyleSheet.create({
     paddingTop: SIZES.spacing.xl,
     backgroundColor: COLORS.background.secondary,
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SIZES.spacing.sm,
+  },
   headerTitle: {
     fontSize: FONTS.size.xl,
     fontWeight: FONTS.weight.bold,
     color: COLORS.text.primary,
-    marginBottom: SIZES.spacing.sm,
+  },
+  mealPlanButton: {
+    padding: 8,
   },
   headerStats: {
     alignItems: 'flex-start',

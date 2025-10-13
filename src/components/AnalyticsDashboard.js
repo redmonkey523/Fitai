@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, FONTS, SIZES, SHADOWS } from '../constants/theme';
-import { aiRecommender } from '../utils/aiWorkoutRecommender';
+// import { aiRecommender } from '../utils/aiWorkoutRecommender';
+import api from '../services/api';
+import Toast from 'react-native-toast-message';
+import { useAuth } from '../contexts/AuthContext';
 
 // Import components
 import Card from './Card';
@@ -15,54 +18,75 @@ const AnalyticsDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [analyticsData, setAnalyticsData] = useState(null);
   const [insights, setInsights] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const { entitlements } = useAuth();
+  const isPro = Boolean(entitlements?.pro || entitlements?.isAdmin);
 
   useEffect(() => {
     loadAnalyticsData();
   }, []);
 
-  const loadAnalyticsData = () => {
-    // Mock analytics data - in a real app, this would come from your backend
-    const data = {
-      overview: {
-        totalWorkouts: 24,
-        totalCalories: 8750,
-        avgWorkoutDuration: 42,
-        currentStreak: 5,
-        weeklyGoalProgress: 0.75,
-        monthlyGoalProgress: 0.60
-      },
-      trends: {
-        weekly: [
-          { day: 'Mon', workouts: 1, calories: 250, steps: 6500 },
-          { day: 'Tue', workouts: 2, calories: 450, steps: 8200 },
-          { day: 'Wed', workouts: 0, calories: 150, steps: 5800 },
-          { day: 'Thu', workouts: 1, calories: 320, steps: 7400 },
-          { day: 'Fri', workouts: 1, calories: 380, steps: 9100 },
-          { day: 'Sat', workouts: 2, calories: 520, steps: 11200 },
-          { day: 'Sun', workouts: 0, calories: 180, steps: 4300 },
-        ],
-        monthly: {
-          workouts: [18, 22, 24, 26],
-          calories: [7200, 8100, 8750, 9200],
-          steps: [180000, 195000, 210000, 225000]
-        }
-      },
-      correlations: {
-        nutritionWorkout: 0.78,
-        sleepPerformance: 0.65,
-        stressRecovery: -0.42,
-        hydrationEnergy: 0.71
-      },
-      predictions: {
-        nextWeekWorkouts: 5,
-        nextWeekCalories: 2100,
-        goalAchievementDate: '2025-04-15',
-        recommendedIntensity: 'moderate'
-      }
-    };
+  const loadAnalyticsData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [dashRes, workoutsRes, nutritionRes, progressRes, insightsRes] = await Promise.all([
+        api.getAnalyticsDashboard(),
+        api.getWorkoutAnalytics({ period: 'month' }),
+        api.getNutritionAnalytics({ period: 'month' }),
+        api.getProgressAnalytics({ period: 'month' }),
+        api.getAnalyticsInsights().catch(() => null),
+      ]);
 
-    setAnalyticsData(data);
-    generateInsights(data);
+      const base = dashRes?.data?.data || dashRes?.data || dashRes;
+      const data = {
+        overview: {
+          totalWorkouts: base?.overview?.totalWorkouts || 0,
+          totalCalories: base?.workoutAnalytics?.totalCalories || 0,
+          avgWorkoutDuration: base?.workoutAnalytics?.averageDuration || 0,
+          currentStreak: base?.overview?.currentStreak || 0,
+          weeklyGoalProgress: 0,
+          monthlyGoalProgress: 0,
+        },
+        trends: {
+          weekly: (base?.weeklyTrends?.workouts || []).map((w) => ({
+            day: new Date(w._id).toLocaleDateString(undefined, { weekday: 'short' }),
+            workouts: w.count || 0,
+            calories: w.calories || 0,
+            steps: 0,
+          })),
+          monthly: { workouts: [], calories: [], steps: [] },
+        },
+        correlations: {},
+        predictions: {},
+      };
+
+      // Optional: could enrich with workouts/nutrition/progress series here if needed
+      setAnalyticsData(data);
+
+      const ins = insightsRes?.data?.data?.insights || insightsRes?.data?.insights || insightsRes?.insights;
+      if (Array.isArray(ins) && ins.length) {
+        setInsights(ins.map((i) => ({
+          type: i.type,
+          title: i.title,
+          message: i.message,
+          icon: i.type === 'achievement' ? '🏆' : i.type === 'nutrition' ? '🍎' : i.type === 'workout' ? '💪' : '📊',
+        })));
+      } else {
+        generateInsights(data);
+      }
+      // Progress KPI: optional usage of v2 fields
+      const photosCount = progressRes?.photosCount ?? progressRes?.data?.photosCount;
+      const workoutsCount = progressRes?.workoutsCount ?? progressRes?.data?.workoutsCount;
+      // can be displayed by the UI if needed
+    } catch (e) {
+      setError(e?.message || 'Failed to load analytics');
+      Toast.show({ type: 'error', text1: 'Analytics Error', text2: e?.message || 'Failed to load analytics' });
+      setAnalyticsData({ overview: { totalWorkouts: 0, totalCalories: 0, avgWorkoutDuration: 0, currentStreak: 0, weeklyGoalProgress: 0, monthlyGoalProgress: 0 }, trends: { weekly: [], monthly: { workouts: [], calories: [], steps: [] } } });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const generateInsights = (data) => {
@@ -231,55 +255,65 @@ const AnalyticsDashboard = () => {
           </View>
         </Card>
 
-        {/* Performance Correlations */}
-        <Card title="Performance Correlations" style={styles.correlationCard}>
-          <View style={styles.correlationContainer}>
-            {Object.entries(analyticsData.correlations).map(([key, value]) => (
-              <View key={key} style={styles.correlationItem}>
-                <View style={styles.correlationHeader}>
-                  <Text style={styles.correlationLabel}>
-                    {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                  </Text>
-                  <Text style={styles.correlationValue}>
-                    {Math.abs(value * 100).toFixed(0)}%
+        {/* Performance Correlations (Pro) */}
+        {isPro ? (
+          <Card title="Performance Correlations" style={styles.correlationCard}>
+            <View style={styles.correlationContainer}>
+              {Object.entries(analyticsData.correlations).map(([key, value]) => (
+                <View key={key} style={styles.correlationItem}>
+                  <View style={styles.correlationHeader}>
+                    <Text style={styles.correlationLabel}>
+                      {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                    </Text>
+                    <Text style={styles.correlationValue}>
+                      {Math.abs(value * 100).toFixed(0)}%
+                    </Text>
+                  </View>
+                  <ProgressBar 
+                    progress={Math.abs(value)} 
+                    type={value > 0 ? "progress" : "workout"} 
+                  />
+                  <Text style={styles.correlationDescription}>
+                    {value > 0 ? 'Positive correlation' : 'Negative correlation'}
                   </Text>
                 </View>
-                <ProgressBar 
-                  progress={Math.abs(value)} 
-                  type={value > 0 ? "progress" : "workout"} 
-                />
-                <Text style={styles.correlationDescription}>
-                  {value > 0 ? 'Positive correlation' : 'Negative correlation'}
+              ))}
+            </View>
+          </Card>
+        ) : (
+          <Card title="Pro Insights" style={styles.correlationCard}>
+            <Text style={{ color: COLORS.text.secondary }}>
+              Unlock correlations and predictions with Pro.
+            </Text>
+          </Card>
+        )}
+
+        {/* Predictions (Pro) */}
+        {isPro && (
+          <Card title="AI Predictions" style={styles.predictionCard}>
+            <View style={styles.predictionContainer}>
+              <View style={styles.predictionItem}>
+                <Text style={styles.predictionLabel}>Next Week Workouts</Text>
+                <Text style={styles.predictionValue}>{analyticsData.predictions.nextWeekWorkouts}</Text>
+              </View>
+              
+              <View style={styles.predictionItem}>
+                <Text style={styles.predictionLabel}>Goal Achievement</Text>
+                <Text style={styles.predictionValue}>
+                  {analyticsData.predictions.goalAchievementDate ? new Date(analyticsData.predictions.goalAchievementDate).toLocaleDateString() : '-'}
                 </Text>
               </View>
-            ))}
-          </View>
-        </Card>
-
-        {/* Predictions */}
-        <Card title="AI Predictions" style={styles.predictionCard}>
-          <View style={styles.predictionContainer}>
-            <View style={styles.predictionItem}>
-              <Text style={styles.predictionLabel}>Next Week Workouts</Text>
-              <Text style={styles.predictionValue}>{analyticsData.predictions.nextWeekWorkouts}</Text>
+              
+              <View style={styles.predictionItem}>
+                <Text style={styles.predictionLabel}>Recommended Intensity</Text>
+                <Text style={styles.predictionValue}>
+                  {analyticsData.predictions.recommendedIntensity ? (analyticsData.predictions.recommendedIntensity.charAt(0).toUpperCase() + 
+                   analyticsData.predictions.recommendedIntensity.slice(1)) : '-'}
+                </Text>
+              </View>
             </View>
-            
-            <View style={styles.predictionItem}>
-              <Text style={styles.predictionLabel}>Goal Achievement</Text>
-              <Text style={styles.predictionValue}>
-                {new Date(analyticsData.predictions.goalAchievementDate).toLocaleDateString()}
-              </Text>
-            </View>
-            
-            <View style={styles.predictionItem}>
-              <Text style={styles.predictionLabel}>Recommended Intensity</Text>
-              <Text style={styles.predictionValue}>
-                {analyticsData.predictions.recommendedIntensity.charAt(0).toUpperCase() + 
-                 analyticsData.predictions.recommendedIntensity.slice(1)}
-              </Text>
-            </View>
-          </View>
-        </Card>
+          </Card>
+        )}
       </View>
     );
   };
@@ -366,6 +400,12 @@ const AnalyticsDashboard = () => {
         </TouchableOpacity>
       </View>
 
+      {loading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={COLORS.accent.primary} />
+          <Text style={{ color: COLORS.text.secondary, marginTop: 8 }}>Loading analytics…</Text>
+        </View>
+      ) : (
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'trends' && renderTrendsTab()}
@@ -374,6 +414,7 @@ const AnalyticsDashboard = () => {
         {/* Bottom padding */}
         <View style={styles.bottomPadding} />
       </ScrollView>
+      )}
     </View>
   );
 };
