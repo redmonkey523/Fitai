@@ -31,6 +31,44 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # typescript
 *.tsbuildinfo
+
+# User uploads (should never be in version control)
+backend/uploads/file/*
+backend/uploads/progress-photos/*
+!backend/uploads/seed/
+!backend/uploads/.gitkeep
+
+# Installers and executables
+*.exe
+*.msi
+*.dmg
+
+# Large media files
+*.MOV
+*.mov
+*.mp4
+*.MP4
+*.avi
+*.AVI
+
+# Log files
+*.log
+logs/
+
+# Test files (use tests/ directory instead)
+test-*.js
+test-*.ps1
+
+# Cleanup and report files
+*CLEANUP*.md
+*REPORT*.md
+*SUMMARY*.md
+*COMPLETE*.md
+*STATUS*.md
+*FIX*.md
+*DEBUG*.md
+*AGENT*.md
