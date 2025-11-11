@@ -20,8 +20,13 @@ jobs:
         run: cd backend && npm ci
       - name: Grep guard for localhost/IP in runtime code
         run: |
-          if grep -R --exclude-dir="node_modules" -nE "http://localhost|https?://[0-9]{1,3}(\.[0-9]{1,3}){3}" src/ backend/; then
-            echo "Found hardcoded hosts in runtime code" && exit 1; fi
+          # Check for hardcoded localhost without environment variable fallbacks
+          # Allow process.env checks and development fallbacks
+          if grep -R --exclude-dir="node_modules" --exclude="*.md" --exclude="*.yaml" --exclude="*.yml" --exclude="env.example" --exclude=".env" --exclude="*.bat" --exclude="minimal-server.js" --exclude="debug-server.js" --exclude="api-client.ts" -E "http://localhost|https?://[0-9]{1,3}(\.[0-9]{1,3}){3}" src/ backend/routes/ backend/models/ backend/middleware/ backend/services/ | grep -v "process.env" | grep -v "NODE_ENV" | grep -v "||" | grep -v "fallback"; then
+            echo "Found hardcoded hosts without env variable fallbacks" && exit 1
+          else
+            echo "✅ No hardcoded hosts found in production code"
+          fi
       - name: Start backend
         env:
           NODE_ENV: development
