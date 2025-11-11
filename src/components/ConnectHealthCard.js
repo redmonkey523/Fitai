@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: COLORS.background.secondary,
     borderRadius: SIZES.radius.md,
-    padding: SIZES.spacing.md,
+    padding: SIZES.spacing.sm,
     borderWidth: 1,
     borderColor: COLORS.border.primary,
     borderStyle: 'dashed',
@@ -168,13 +168,16 @@ const styles = StyleSheet.create({
   compactContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SIZES.spacing.sm,
+    gap: SIZES.spacing.xs,
     flex: 1,
+    flexWrap: 'nowrap',
+    paddingRight: SIZES.spacing.xs,
   },
   compactText: {
-    fontSize: FONTS.size.sm,
+    fontSize: FONTS.size.xs,
     color: COLORS.text.secondary,
     flex: 1,
+    flexShrink: 1,
   },
 });
 

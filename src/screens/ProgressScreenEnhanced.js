@@ -87,7 +87,8 @@ export default function ProgressScreenEnhanced({ navigation }) {
               Take the Goal Quiz to get personalized nutrition and fitness targets
             </Text>
             <Button
-              title="Start Goal Quiz"
+              label="Start Goal Quiz"
+              type="primary"
               onPress={() => navigation.navigate('GoalQuiz')}
               style={styles.goalQuizButton}
             />
@@ -109,8 +110,9 @@ export default function ProgressScreenEnhanced({ navigation }) {
             )}
           </View>
           <Button
-            title="Edit Goals"
-            variant="secondary"
+            label="Edit Goals"
+            type="secondary"
+            size="sm"
             onPress={() => navigation.navigate('GoalQuiz')}
             style={styles.editGoalsButton}
           />
@@ -701,6 +703,7 @@ const styles = StyleSheet.create({
   },
   goalQuizButton: {
     minWidth: 200,
+    marginTop: SIZES.spacing.md,
   },
   goalsCard: {
     marginBottom: SIZES.spacing.md,

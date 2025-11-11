@@ -17,6 +17,9 @@ class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
     this.timeout = REQUEST_TIMEOUT;
+    this._isRefreshing = false;
+    this._refreshPromise = null;
+    this._sessionExpiredShown = false;
   }
 
   // Internal: perform multipart upload with progress
@@ -454,24 +457,74 @@ class ApiService {
         const extra = [validationMessages.join('; '), serverDetail].filter(Boolean).join(' — ');
         const composedMessage = extra ? `${baseMessage} — ${extra}` : baseMessage;
         
-        // Attempt 401 refresh once
+        // Attempt 401 refresh once with queue to prevent multiple refresh attempts
         if (response.status === 401 && options.includeAuth !== false && !options._retried) {
-          try {
-            const { refreshAccessToken } = await import('./authService');
-            const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-            const refreshToken = await AsyncStorage.getItem('refreshToken');
-            if (refreshToken) {
+          // If already refreshing, wait for that refresh to complete
+          if (this._isRefreshing && this._refreshPromise) {
+            try {
+              await this._refreshPromise;
+              // Retry with (hopefully) new token
+              return this.makeRequest(endpoint, { ...options, _retried: true });
+            } catch (refreshError) {
+              // Refresh failed, return null to stop cascading errors
+              return { success: false, message: 'Session expired', _authError: true };
+            }
+          }
+          
+          // Start refresh process
+          this._isRefreshing = true;
+          this._refreshPromise = (async () => {
+            try {
+              const { refreshAccessToken } = await import('./authService');
+              const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+              const refreshToken = await AsyncStorage.getItem('refreshToken');
+              
+              if (!refreshToken) {
+                throw new Error('No refresh token available');
+              }
+              
               const refreshed = await refreshAccessToken(refreshToken);
               await AsyncStorage.setItem('token', refreshed.token);
               if (refreshed.refreshToken) {
                 await AsyncStorage.setItem('refreshToken', refreshed.refreshToken);
               }
-              // Retry with new token
-              return this.makeRequest(endpoint, { ...options, _retried: true });
+              
+              return refreshed;
+            } catch (refreshError) {
+              // Refresh failed - clear session and notify user ONCE
+              const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+              await AsyncStorage.multiRemove(['token', 'refreshToken', 'user', 'isAuthenticated']);
+              
+              if (!this._sessionExpiredShown) {
+                this._sessionExpiredShown = true;
+                console.log('[API] Session expired - clearing auth');
+                Toast.show({
+                  type: 'info',
+                  text1: 'Session Expired',
+                  text2: 'Please log in to continue',
+                  visibilityTime: 4000,
+                  onHide: () => {
+                    setTimeout(() => {
+                      this._sessionExpiredShown = false;
+                    }, 1000);
+                  }
+                });
+              }
+              
+              throw refreshError;
+            } finally {
+              this._isRefreshing = false;
+              this._refreshPromise = null;
             }
-          } catch (e) {
-            console.warn('[API] Token refresh failed:', e);
-            // fallthrough to error
+          })();
+          
+          try {
+            await this._refreshPromise;
+            // Retry with new token
+            return this.makeRequest(endpoint, { ...options, _retried: true });
+          } catch (refreshError) {
+            // Refresh failed, return gracefully instead of throwing
+            return { success: false, message: 'Session expired', _authError: true };
           }
         }
         
@@ -479,7 +532,8 @@ class ApiService {
         err.status = response.status;
         err.data = data;
         
-        if (!options.silent) {
+        // Don't log/toast 401 errors - they're handled above
+        if (!options.silent && response.status !== 401) {
           console.error(`[API] Request failed for ${endpoint}:`, err);
           this._showErrorToast(err, endpoint);
         }
